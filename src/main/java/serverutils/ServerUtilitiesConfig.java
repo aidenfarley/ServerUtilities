@@ -314,6 +314,10 @@ public class ServerUtilitiesConfig {
         @Config.DefaultStringList({ "saves/NEI/global/**", "saves/NEI/local/$WORLDNAME/**" })
         public String[] additional_backup_files;
 
+        @Config.Comment("List of paths to exclude from backup. Use / as directory separator! Use * as wildcard, and $WORLDNAME for the save name. Exact folder paths will exclude all files inside that folder.")
+        @Config.DefaultStringList({})
+        public String[] excluded_backup_files;
+
         @Config.Comment("Run backup in a separated thread (recommended)")
         @Config.DefaultBoolean(true)
         public boolean use_separate_thread;

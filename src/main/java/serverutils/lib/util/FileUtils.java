@@ -235,6 +235,15 @@ public class FileUtils {
 
     public static String getRelativePath(File file) {
         Path filePath = file.toPath().toAbsolutePath();
-        return Paths.get("").toAbsolutePath().relativize(filePath).toString().replace('\\', '/');
+        return normalizePath(Paths.get("").toAbsolutePath().relativize(filePath).toString());
+    }
+
+    public static String normalizePath(String path) {
+        path = path.replace('\\', '/');
+        while (path.startsWith("./")) {
+            path = path.substring(2);
+        }
+
+        return path;
     }
 }

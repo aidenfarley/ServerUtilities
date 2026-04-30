@@ -39,6 +39,7 @@ import serverutils.ServerUtilities;
 import serverutils.ServerUtilitiesConfig;
 import serverutils.lib.math.ChunkDimPos;
 import serverutils.lib.math.Ticks;
+import serverutils.lib.util.BackupFileMatcher;
 import serverutils.lib.util.FileUtils;
 import serverutils.lib.util.ServerUtils;
 import serverutils.lib.util.StringUtils;
@@ -68,7 +69,7 @@ public class ThreadBackup extends Thread {
         isDone = true;
     }
 
-    private static void addBaseFolderFiles(List<File> files, File saveFile) {
+    private static void addBaseFolderFiles(List<File> files, File saveFile, BackupFileMatcher backupFileMatcher) {
         String saveName = saveFile.getName();
 
         for (String pattern : backups.additional_backup_files) {
@@ -76,7 +77,11 @@ public class ThreadBackup extends Thread {
 
             int firstWildcardIndex = pattern.indexOf('*');
             if (firstWildcardIndex == -1) {
-                files.addAll(FileUtils.listTree(new File(pattern)));
+                for (File file : FileUtils.listTree(new File(pattern))) {
+                    if (!backupFileMatcher.isExcluded(file)) {
+                        files.add(file);
+                    }
+                }
                 continue;
             }
 
@@ -90,7 +95,7 @@ public class ThreadBackup extends Thread {
             PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
             List<File> fileCandidates = FileUtils.listTree(rootFolder.toFile());
             for (File file : fileCandidates) {
-                if (matcher.matches(file.toPath())) {
+                if (matcher.matches(file.toPath()) && !backupFileMatcher.isExcluded(file)) {
                     files.add(file);
                 }
             }
@@ -102,8 +107,10 @@ public class ThreadBackup extends Thread {
                 + ".zip";
         File dstFile = null;
         try {
+            BackupFileMatcher backupFileMatcher = new BackupFileMatcher(src.getName());
             List<File> files = FileUtils.listTree(src);
-            addBaseFolderFiles(files, src);
+            files.removeIf(backupFileMatcher::isExcluded);
+            addBaseFolderFiles(files, src, backupFileMatcher);
             long start = System.currentTimeMillis();
             logMillis = start + Ticks.SECOND.x(5).millis();
 
@@ -111,9 +118,9 @@ public class ThreadBackup extends Thread {
             try (compressor) {
                 compressor.createOutputStream(dstFile);
                 if (!chunks.isEmpty() && backups.only_backup_claimed_chunks) {
-                    backupRegions(files, chunks, compressor);
+                    backupRegions(files, chunks, compressor, backupFileMatcher);
                 } else {
-                    compressFiles(files, compressor);
+                    compressFiles(files, compressor, backupFileMatcher);
                 }
 
                 String backupSize = FileUtils.getSizeString(dstFile);
@@ -158,11 +165,15 @@ public class ThreadBackup extends Thread {
         }
     }
 
-    private static void compressFiles(List<File> files, ICompress compressor) throws IOException {
+    private static void compressFiles(List<File> files, ICompress compressor, BackupFileMatcher backupFileMatcher)
+            throws IOException {
         int allFiles = files.size();
         for (int i = 0; i < allFiles; i++) {
             File file = files.get(i);
-            compressFile(FileUtils.getRelativePath(file), file, compressor, i, allFiles);
+            String entryName = FileUtils.getRelativePath(file);
+            if (!backupFileMatcher.isExcluded(entryName)) {
+                compressFile(entryName, file, compressor, i, allFiles);
+            }
         }
     }
 
@@ -172,25 +183,30 @@ public class ThreadBackup extends Thread {
         compressor.addFileToArchive(file, entryName);
     }
 
-    private static void backupRegions(List<File> files, Set<ChunkDimPos> chunksToBackup, ICompress compressor)
-            throws IOException {
+    private static void backupRegions(List<File> files, Set<ChunkDimPos> chunksToBackup, ICompress compressor,
+            BackupFileMatcher backupFileMatcher) throws IOException {
         Object2ObjectMap<File, ObjectSet<ChunkDimPos>> dimRegionClaims = mapClaimsToRegionFile(chunksToBackup);
-        files.removeIf(f -> f.getName().endsWith(".mca"));
+        files.removeIf(f -> f.getName().endsWith(".mca") || backupFileMatcher.isExcluded(f));
 
         int index = 0;
         int savedChunks = 0;
-        int regionFiles = dimRegionClaims.size();
+        int regionFiles = countIncludedRegionFiles(dimRegionClaims, backupFileMatcher);
         int totalFiles = files.size() + regionFiles;
 
         if (backups.backup_entire_regions_with_claims) {
             // Backup entire region files that contain claimed chunks
             for (Object2ObjectMap.Entry<File, ObjectSet<ChunkDimPos>> entry : dimRegionClaims.object2ObjectEntrySet()) {
                 File regionFile = entry.getKey();
+                String entryName = FileUtils.getRelativePath(regionFile);
+                if (backupFileMatcher.isExcluded(entryName)) {
+                    continue;
+                }
+
                 ObjectSet<ChunkDimPos> claimedChunks = entry.getValue();
                 savedChunks += claimedChunks.size();
 
                 // Backup the entire region file as-is
-                compressFile(FileUtils.getRelativePath(regionFile), regionFile, compressor, index++, totalFiles);
+                compressFile(entryName, regionFile, compressor, index++, totalFiles);
             }
             ServerUtilities.LOGGER
                     .info("Backed up {} entire regions containing {} claimed chunks", regionFiles, savedChunks);
@@ -198,6 +214,11 @@ public class ThreadBackup extends Thread {
             // Standard behavior: reconstruct temporary region files with only claimed chunks
             for (Object2ObjectMap.Entry<File, ObjectSet<ChunkDimPos>> entry : dimRegionClaims.object2ObjectEntrySet()) {
                 File file = entry.getKey();
+                String entryName = FileUtils.getRelativePath(file);
+                if (backupFileMatcher.isExcluded(entryName)) {
+                    continue;
+                }
+
                 File dimensionRoot = file.getParentFile().getParentFile();
                 File tempFile = FileUtils.newFile(new File(BACKUP_TEMP_FOLDER, file.getName()));
                 RegionFile tempRegion = new RegionFile(tempFile);
@@ -216,7 +237,7 @@ public class ThreadBackup extends Thread {
 
                 tempRegion.close();
                 if (hasData) {
-                    compressFile(FileUtils.getRelativePath(file), tempFile, compressor, index++, totalFiles);
+                    compressFile(entryName, tempFile, compressor, index++, totalFiles);
                 }
 
                 FileUtils.delete(tempFile);
@@ -227,6 +248,18 @@ public class ThreadBackup extends Thread {
         for (File file : files) {
             compressFile(FileUtils.getRelativePath(file), file, compressor, index++, totalFiles);
         }
+    }
+
+    private static int countIncludedRegionFiles(Object2ObjectMap<File, ObjectSet<ChunkDimPos>> dimRegionClaims,
+            BackupFileMatcher backupFileMatcher) {
+        int count = 0;
+        for (File regionFile : dimRegionClaims.keySet()) {
+            if (!backupFileMatcher.isExcluded(regionFile)) {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static Object2ObjectMap<File, ObjectSet<ChunkDimPos>> mapClaimsToRegionFile(

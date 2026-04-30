@@ -50,6 +50,7 @@ import serverutils.lib.gui.Widget;
 import serverutils.lib.gui.WidgetLayout;
 import serverutils.lib.gui.misc.GuiButtonListBase;
 import serverutils.lib.icon.Icon;
+import serverutils.lib.util.BackupFileMatcher;
 import serverutils.lib.util.FileUtils;
 import serverutils.lib.util.compression.ICompress;
 import serverutils.lib.util.misc.MouseButton;
@@ -223,6 +224,7 @@ public class GuiRestoreBackup extends GuiButtonListBase {
 
     @SuppressWarnings("ResultOfMethodCallIgnored")
     private void renameAdditionalFiles(File previousRoot, boolean includeGlobal) {
+        BackupFileMatcher backupFileMatcher = new BackupFileMatcher(worldName);
         for (String pattern : backups.additional_backup_files) {
             if (!pattern.contains("$WORLDNAME") && !includeGlobal) {
                 continue;
@@ -234,6 +236,7 @@ public class GuiRestoreBackup extends GuiButtonListBase {
             int firstWildcardIndex = pattern.indexOf('*');
             if (firstWildcardIndex == -1) {
                 previousFiles = FileUtils.listTree(new File(pattern));
+                previousFiles.removeIf(backupFileMatcher::isExcluded);
             } else {
                 Path rootFolder = Paths.get(pattern.substring(0, firstWildcardIndex));
 
@@ -246,7 +249,7 @@ public class GuiRestoreBackup extends GuiButtonListBase {
                 List<File> fileCandidates = FileUtils.listTree(rootFolder.toFile());
                 previousFiles = new ArrayList<>();
                 for (File file : fileCandidates) {
-                    if (matcher.matches(file.toPath())) {
+                    if (matcher.matches(file.toPath()) && !backupFileMatcher.isExcluded(file)) {
                         previousFiles.add(file);
                     }
                 }

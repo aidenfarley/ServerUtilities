@@ -32,9 +32,16 @@ public class MessageEditNBTRequest extends MessageToClient {
         }
         if (ray.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK
                 && Minecraft.getMinecraft().theWorld.getTileEntity(ray.blockX, ray.blockY, ray.blockZ) != null) {
-            ClientUtils.execClientCommand(String.format("/nbtedit block %d %d %d", ray.blockX, ray.blockY, ray.blockZ));
+            ClientUtils.execClientCommand(
+                    String.format(
+                            java.util.Locale.ROOT,
+                            "/nbtedit block %d %d %d",
+                            ray.blockX,
+                            ray.blockY,
+                            ray.blockZ));
         } else if (ray.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY && ray.entityHit != null) {
-            ClientUtils.execClientCommand(String.format("/nbtedit entity %s", ray.entityHit.getEntityId()));
+            ClientUtils.execClientCommand(
+                    String.format(java.util.Locale.ROOT, "/nbtedit entity %s", ray.entityHit.getEntityId()));
         } else if (Minecraft.getMinecraft().thePlayer.inventory.getCurrentItem() != null) {
             ClientUtils.execClientCommand("/nbtedit item");
         } else {

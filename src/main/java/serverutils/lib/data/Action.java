@@ -54,7 +54,7 @@ public abstract class Action {
         public Inst(Action action, Action.Type t) {
             id = action.getId();
             title = action.getTitle();
-            requiresConfirm = action.getRequireConfirm();
+            requiresConfirm = action.requiresConfirmation();
             icon = action.getIcon();
             enabled = t.isEnabled();
             order = action.getOrder();
@@ -82,12 +82,12 @@ public abstract class Action {
     private Icon icon;
     private int order;
 
-    public Action(ResourceLocation _id, IChatComponent t, Icon i, int o) {
-        id = _id;
-        title = t;
+    public Action(ResourceLocation id, IChatComponent title, Icon icon, int order) {
+        this.id = id;
+        this.title = title;
         requiresConfirm = false;
-        icon = i;
-        order = o;
+        this.icon = icon;
+        this.order = order;
     }
 
     public final ResourceLocation getId() {
@@ -98,8 +98,8 @@ public abstract class Action {
 
     public abstract void onAction(ForgePlayer player, NBTTagCompound data);
 
-    public Action setTitle(IChatComponent t) {
-        title = t;
+    public Action setTitle(IChatComponent title) {
+        this.title = title;
         return this;
     }
 
@@ -112,12 +112,17 @@ public abstract class Action {
         return this;
     }
 
+    @Deprecated
     public boolean getRequireConfirm() {
+        return requiresConfirmation();
+    }
+
+    public boolean requiresConfirmation() {
         return requiresConfirm;
     }
 
-    public Action setIcon(Icon i) {
-        icon = i;
+    public Action setIcon(Icon icon) {
+        this.icon = icon;
         return this;
     }
 
@@ -125,8 +130,8 @@ public abstract class Action {
         return icon;
     }
 
-    public Action setOrder(int o) {
-        order = MathHelper.clamp_int(o, Short.MIN_VALUE, Short.MAX_VALUE);
+    public Action setOrder(int order) {
+        this.order = MathHelper.clamp_int(order, Short.MIN_VALUE, Short.MAX_VALUE);
         return this;
     }
 
@@ -138,8 +143,13 @@ public abstract class Action {
         return id.hashCode();
     }
 
-    public final boolean equals(Object o) {
-        return o == this;
+    /** Actions use instance identity for equality; IDs are compared explicitly through {@link #hasSameId(Action)}. */
+    public final boolean equals(Object other) {
+        return other == this;
+    }
+
+    public final boolean hasSameId(Action other) {
+        return other != null && id.equals(other.id);
     }
 
     public final String toString() {

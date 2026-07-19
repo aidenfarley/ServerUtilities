@@ -50,7 +50,7 @@ public class MessageViewCrash extends MessageToServer {
                 }
             } catch (Exception ex) {
                 if (ServerUtilitiesConfig.debugging.print_more_errors) {
-                    ex.printStackTrace();
+                    serverutils.ServerUtilities.LOGGER.error("Failed to read a crash report", ex);
                 }
             }
         }

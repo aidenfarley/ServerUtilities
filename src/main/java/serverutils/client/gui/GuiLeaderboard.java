@@ -82,6 +82,6 @@ public class GuiLeaderboard extends GuiButtonListBase {
 
     @Override
     public String getFilterText(Widget widget) {
-        return ((LeaderboardEntry) widget).value.username.toLowerCase();
+        return ((LeaderboardEntry) widget).value.username.toLowerCase(java.util.Locale.ROOT);
     }
 }

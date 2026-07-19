@@ -221,7 +221,9 @@ public abstract class Icon implements Drawable {
                 case "file":
                     try {
                         return new URLImageIcon(new URI(id));
-                    } catch (Exception ex) {}
+                    } catch (Exception ex) {
+                        serverutils.ServerUtilities.LOGGER.debug("Ignoring invalid icon URI " + id, ex);
+                    }
                 case "player":
                     return new PlayerHeadIcon(StringUtils.fromString(ida[1]));
                 case "hollow_rectangle":

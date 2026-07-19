@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.net.MalformedURLException;
 import java.net.Proxy;
 import java.net.URI;
 import java.net.URL;
@@ -67,8 +68,8 @@ public abstract class DataReader {
             case "https":
                 try {
                     return get(uri.toURL(), "", proxy);
-                } catch (Exception ex) {
-                    ex.printStackTrace();
+                } catch (MalformedURLException ex) {
+                    throw new IllegalArgumentException("Invalid HTTP data URI: " + uri, ex);
                 }
             case "file":
                 return get(new File(uri.getPath()));
@@ -85,7 +86,7 @@ public abstract class DataReader {
         try {
             return get(Minecraft.getMinecraft().getResourceManager().getResource(new ResourceLocation(uri.getPath())));
         } catch (Throwable ex) {
-            throw new IllegalArgumentException("Failed to load minecraft resource: " + uri.getPath() + "!");
+            throw new IllegalArgumentException("Failed to load minecraft resource: " + uri.getPath() + "!", ex);
         }
     }
 

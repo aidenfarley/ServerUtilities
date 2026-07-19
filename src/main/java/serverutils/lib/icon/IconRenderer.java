@@ -124,72 +124,93 @@ public class IconRenderer {
 
         mc.entityRenderer.setupOverlayRendering();
         RenderHelper.enableGUIStandardItemLighting();
-        float scale = size / (16F * res.getScaleFactor());
-        GlStateManager.translate(0, 0, -(scale * 100F));
-
-        GlStateManager.scale(scale, scale, scale);
-
         RenderItem renderItem = RenderItem.getInstance();
         float oldZLevel = renderItem.zLevel;
-        renderItem.zLevel = -50;
+        GlStateManager.pushMatrix();
+        try {
+            float scale = size / (16F * res.getScaleFactor());
+            GlStateManager.translate(0, 0, -(scale * 100F));
+            GlStateManager.scale(scale, scale, scale);
+            renderItem.zLevel = -50;
 
-        GlStateManager.enableRescaleNormal();
-        GlStateManager.enableColorMaterial();
-        GlStateManager.enableDepth();
-        GlStateManager.enableBlend();
-        GlStateManager
-                .tryBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_SRC_ALPHA, GL11.GL_ONE);
-        GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-        GlStateManager.disableAlpha();
+            GlStateManager.enableRescaleNormal();
+            GlStateManager.enableColorMaterial();
+            GlStateManager.enableDepth();
+            GlStateManager.enableBlend();
+            GlStateManager.tryBlendFuncSeparate(
+                    GL11.GL_SRC_ALPHA,
+                    GL11.GL_ONE_MINUS_SRC_ALPHA,
+                    GL11.GL_SRC_ALPHA,
+                    GL11.GL_ONE);
+            GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            GlStateManager.disableAlpha();
 
-        int[] pixels = new int[size * size];
-        AffineTransform at = new AffineTransform();
-        at.concatenate(AffineTransform.getScaleInstance(1, -1));
-        at.concatenate(AffineTransform.getTranslateInstance(0, -size));
-        BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+            int[] pixels = new int[size * size];
+            AffineTransform at = new AffineTransform();
+            at.concatenate(AffineTransform.getScaleInstance(1, -1));
+            at.concatenate(AffineTransform.getTranslateInstance(0, -size));
+            BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
 
-        for (IconCallbackPair pair : queued) {
-            GlStateManager.pushMatrix();
-            GlStateManager.clearColor(0F, 0F, 0F, 0F);
-            GlStateManager.clear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
-            pair.icon.drawStatic(0, 0, 16, 16);
-            GlStateManager.popMatrix();
+            for (IconCallbackPair pair : queued) {
+                Image renderedImage = null;
+                try {
+                    GlStateManager.pushMatrix();
+                    try {
+                        GlStateManager.clearColor(0F, 0F, 0F, 0F);
+                        GlStateManager.clear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+                        pair.icon.drawStatic(0, 0, 16, 16);
+                    } finally {
+                        GlStateManager.popMatrix();
+                    }
 
-            try {
-                ByteBuffer buf = BufferUtils.createByteBuffer(size * size * 4);
-                GL11.glReadBuffer(GL11.GL_BACK);
-                GlStateManager.glGetError(); // FIXME: For some reason it throws error here, but it still works. Calling
-                // this to not spam console
-                GL11.glReadPixels(
-                        0,
-                        Minecraft.getMinecraft().displayHeight - size,
-                        size,
-                        size,
-                        GL12.GL_BGRA,
-                        GL11.GL_UNSIGNED_BYTE,
-                        buf);
-                buf.asIntBuffer().get(pixels);
-                img.setRGB(0, 0, size, size, pixels, 0, size);
-                BufferedImage flipped = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
-                Graphics2D g = flipped.createGraphics();
-                g.transform(at);
-                g.drawImage(img, 0, 0, null);
-                g.dispose();
-                pixels = flipped.getRGB(0, 0, size, size, pixels, 0, size);
+                    ByteBuffer buf = BufferUtils.createByteBuffer(size * size * 4);
+                    GL11.glReadBuffer(GL11.GL_BACK);
+                    GlStateManager.glGetError(); // FIXME: For some reason it throws error here, but it still works.
+                                                 // Calling
+                    // this to not spam console
+                    GL11.glReadPixels(
+                            0,
+                            Minecraft.getMinecraft().displayHeight - size,
+                            size,
+                            size,
+                            GL12.GL_BGRA,
+                            GL11.GL_UNSIGNED_BYTE,
+                            buf);
+                    buf.asIntBuffer().get(pixels);
+                    img.setRGB(0, 0, size, size, pixels, 0, size);
+                    BufferedImage flipped = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D g = flipped.createGraphics();
+                    try {
+                        g.transform(at);
+                        g.drawImage(img, 0, 0, null);
+                    } finally {
+                        g.dispose();
+                    }
+                    pixels = flipped.getRGB(0, 0, size, size, pixels, 0, size);
 
-                BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
-                image.setRGB(0, 0, size, size, pixels, 0, size);
-                imageCache.put(pair.icon, image);
-                pair.callback.imageLoaded(true, image);
-            } catch (Exception ex) {
-                ex.printStackTrace();
+                    BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+                    image.setRGB(0, 0, size, size, pixels, 0, size);
+                    imageCache.put(pair.icon, image);
+                    renderedImage = image;
+                } catch (Exception ex) {
+                    serverutils.ServerUtilities.LOGGER.error("Failed to load an icon image", ex);
+                }
+
+                try {
+                    pair.callback.imageLoaded(true, renderedImage);
+                } catch (RuntimeException ex) {
+                    serverutils.ServerUtilities.LOGGER.error("Icon callback failed", ex);
+                }
             }
+        } finally {
+            GlStateManager.disableLighting();
+            GlStateManager.disableColorMaterial();
+            GlStateManager.disableDepth();
+            GlStateManager.disableBlend();
+            GlStateManager.disableRescaleNormal();
+            GlStateManager.enableAlpha();
+            renderItem.zLevel = oldZLevel;
+            GlStateManager.popMatrix();
         }
-
-        GlStateManager.disableLighting();
-        GlStateManager.disableColorMaterial();
-        GlStateManager.disableDepth();
-        GlStateManager.disableBlend();
-        renderItem.zLevel = oldZLevel;
     }
 }

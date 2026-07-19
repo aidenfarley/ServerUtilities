@@ -87,7 +87,7 @@ public class MessageClaimedChunksModify extends MessageToServer {
                 for (ChunkCoordIntPair pair : chunks) {
                     ChunkDimPos pos = new ChunkDimPos(pair, player.dimension);
                     if (ClaimedChunks.instance.canPlayerModify(p, pos, ServerUtilitiesPermissions.CLAIMS_OTHER_LOAD)) {
-                        ClaimedChunks.instance.loadChunk(p, p.team, pos);
+                        ClaimedChunks.instance.loadChunk(p, p.getTeam(), pos);
                     }
                 }
                 break;

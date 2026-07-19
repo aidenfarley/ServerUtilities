@@ -33,7 +33,7 @@ public class CmdSetWarp extends CmdBase {
         checkArgs(sender, args, 1);
         BlockDimPos pos;
 
-        args[0] = args[0].toLowerCase();
+        args[0] = args[0].toLowerCase(java.util.Locale.ROOT);
 
         if (args.length == 2) {
             EntityPlayerMP targetPlayer = CommandUtils.getForgePlayer(sender, args[1]).getCommandPlayer(sender);

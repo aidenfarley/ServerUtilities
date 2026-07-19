@@ -68,7 +68,7 @@ public class Ticks {
                         default -> ticks.add(Long.parseLong(s));
                     };
                 } catch (Exception ex) {
-                    ex.printStackTrace();
+                    serverutils.ServerUtilities.LOGGER.warn("Ignoring invalid tick duration '" + s + "'", ex);
                 }
             }
         }

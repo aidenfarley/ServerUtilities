@@ -46,7 +46,8 @@ public interface ICommandWithPermission {
         if (this instanceof CommandTreeBase tree) {
             for (ICommand c : tree.getSubCommands()) {
                 ICommandWithPermission child = (ICommandWithPermission) c;
-                child.serverutilities$setPermissionNode(node.toLowerCase() + '.' + c.getCommandName());
+                child.serverutilities$setPermissionNode(
+                        node.toLowerCase(java.util.Locale.ROOT) + '.' + c.getCommandName());
                 child.serverutilities$setModName(this.serverutilities$getModName());
                 child.serverUtilities$registerPermissions();
             }

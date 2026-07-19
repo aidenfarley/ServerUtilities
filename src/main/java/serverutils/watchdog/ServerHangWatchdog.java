@@ -55,14 +55,15 @@ public class ServerHangWatchdog implements Runnable {
             if (k > this.maxTickTime) {
                 LOGGER.fatal(
                         "A single server tick took {} seconds (should be max {})",
-                        String.format("%.2f", (float) k / 1000.0F),
-                        String.format("%.2f", 0.05F));
+                        String.format(java.util.Locale.ROOT, "%.2f", (float) k / 1000.0F),
+                        String.format(java.util.Locale.ROOT, "%.2f", 0.05F));
                 LOGGER.fatal("Considering it to be crashed, server will forcibly shutdown.");
                 ThreadMXBean threadmxbean = ManagementFactory.getThreadMXBean();
                 ThreadInfo[] athreadinfo = threadmxbean.dumpAllThreads(true, true);
                 StringBuilder stringbuilder = new StringBuilder();
                 Error error = new Error(
                         String.format(
+                                java.util.Locale.ROOT,
                                 "ServerHangWatchdog detected that a single server tick took %.2f seconds (should be max 0.05)",
                                 k / 1000F)); // Forge: don't just make a crash report with a seemingly-inexplicable
                                              // Error
@@ -95,8 +96,9 @@ public class ServerHangWatchdog implements Runnable {
 
             try {
                 Thread.sleep(i + this.maxTickTime - j);
-            } catch (InterruptedException var15) {
-                ;
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                return;
             }
         }
     }

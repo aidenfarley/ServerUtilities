@@ -20,7 +20,7 @@ public class CmdLeave extends CmdBase {
 
         if (!p.hasTeam()) {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.error.no_team");
-        } else if (!p.team.removeMember(p)) {
+        } else if (!p.getTeam().removeMember(p)) {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.error.must_transfer_ownership");
         }
     }

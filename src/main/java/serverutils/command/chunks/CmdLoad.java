@@ -33,7 +33,7 @@ public class CmdLoad extends CmdBase {
         ChunkDimPos pos = new ChunkDimPos(player);
 
         if (p.hasTeam() && ClaimedChunks.instance.canPlayerModify(p, pos, ServerUtilitiesPermissions.CLAIMS_OTHER_LOAD)
-                && ClaimedChunks.instance.loadChunk(p, p.team, pos)) {
+                && ClaimedChunks.instance.loadChunk(p, p.getTeam(), pos)) {
             CHUNK_MODIFIED.send(player, "serverutilities.lang.chunks.chunk_loaded");
             ServerUtilitiesNotifications.updateChunkMessage(player, pos);
         } else {

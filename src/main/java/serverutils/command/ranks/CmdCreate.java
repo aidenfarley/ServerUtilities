@@ -32,7 +32,7 @@ public class CmdCreate extends CmdBase {
 
         if (args.length > 1) {
             for (int i = 1; i < args.length; i++) {
-                rank.addParent(Ranks.INSTANCE.getRank(sender, args[1].toLowerCase()));
+                rank.addParent(Ranks.INSTANCE.getRank(sender, args[1].toLowerCase(java.util.Locale.ROOT)));
             }
         }
 

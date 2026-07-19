@@ -121,11 +121,11 @@ public class BaublesInventory implements IModdedInventory {
 
     private @Nullable File getBaublesFile(ForgePlayer player) {
         File baublesFile = new File(
-                player.team.universe.getWorldDirectory(),
+                player.getUniverse().getWorldDirectory(),
                 "playerdata/" + player.getName() + ".baub");
         if (!baublesFile.exists()) {
             baublesFile = new File(
-                    player.team.universe.getWorldDirectory(),
+                    player.getUniverse().getWorldDirectory(),
                     "playerdata/" + player.getName() + ".baubback");
         }
         if (!baublesFile.exists()) return null;

@@ -43,7 +43,7 @@ public class MessageClaimedChunksUpdate extends MessageToClient {
         startZ = sz;
 
         ForgePlayer p = Universe.get().getPlayer(player);
-        ServerUtilitiesTeamData teamData = ServerUtilitiesTeamData.get(p.team);
+        ServerUtilitiesTeamData teamData = ServerUtilitiesTeamData.get(p.getTeam());
 
         Collection<ClaimedChunk> chunks = teamData.team.isValid()
                 ? ClaimedChunks.instance.getTeamChunks(teamData.team, OptionalInt.empty())

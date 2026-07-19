@@ -2,6 +2,7 @@ package serverutils.aurora;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraftforge.common.MinecraftForge;
@@ -9,11 +10,12 @@ import net.minecraftforge.common.MinecraftForge;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -25,6 +27,7 @@ import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpVersion;
+import serverutils.ServerUtilities;
 import serverutils.aurora.page.HomePage;
 import serverutils.aurora.page.WebPage;
 import serverutils.aurora.page.WebPageNotFound;
@@ -37,6 +40,8 @@ public class AuroraServer {
     private ChannelFuture channel;
     private final EventLoopGroup masterGroup;
     private final EventLoopGroup slaveGroup;
+    private Thread shutdownHook;
+    private boolean stopped;
 
     private byte[] iconBytes = null;
 
@@ -51,9 +56,7 @@ public class AuroraServer {
         return server;
     }
 
-    void start() {
-        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
-
+    boolean start() {
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
             bootstrap.group(masterGroup, slaveGroup);
@@ -64,15 +67,11 @@ public class AuroraServer {
                 public void initChannel(final SocketChannel ch) {
                     ch.pipeline().addLast("codec", new HttpServerCodec());
                     ch.pipeline().addLast("aggregator", new HttpObjectAggregator(512 * 1024));
-                    ch.pipeline().addLast("request", new ChannelInboundHandlerAdapter() {
+                    ch.pipeline().addLast("request", new SimpleChannelInboundHandler<FullHttpRequest>() {
 
                         @Override
-                        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-                            if (msg instanceof FullHttpRequest) {
-                                handleRequest(ch, ctx, (FullHttpRequest) msg);
-                            } else {
-                                super.channelRead(ctx, msg);
-                            }
+                        protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) {
+                            handleRequest(ctx, request);
                         }
 
                         @Override
@@ -82,11 +81,20 @@ public class AuroraServer {
 
                         @Override
                         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-                            ctx.writeAndFlush(
-                                    new DefaultFullHttpResponse(
-                                            HttpVersion.HTTP_1_1,
-                                            HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                                            Unpooled.copiedBuffer(cause.getMessage().getBytes())));
+                            String message = cause.getMessage();
+                            if (message == null || message.isEmpty()) {
+                                message = cause.getClass().getName();
+                            }
+
+                            byte[] content = message.getBytes(StandardCharsets.UTF_8);
+                            FullHttpResponse response = new DefaultFullHttpResponse(
+                                    HttpVersion.HTTP_1_1,
+                                    HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                                    Unpooled.wrappedBuffer(content));
+                            response.headers().set(HttpHeaders.Names.CONTENT_TYPE, "text/plain; charset=UTF-8");
+                            response.headers().set(HttpHeaders.Names.CONTENT_LENGTH, content.length);
+                            response.headers().set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
+                            ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
                         }
                     });
                 }
@@ -95,19 +103,71 @@ public class AuroraServer {
             bootstrap.option(ChannelOption.SO_BACKLOG, 128);
             bootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
             channel = bootstrap.bind(port).sync();
-        } catch (InterruptedException ignored) {}
+            shutdownHook = new Thread(this::shutdown, "ServerUtilities-Aurora-Shutdown");
+            Runtime.getRuntime().addShutdownHook(shutdownHook);
+            return true;
+        } catch (InterruptedException ex) {
+            ServerUtilities.LOGGER.warn("Interrupted while starting Aurora", ex);
+            stopAfterFailedStart();
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (Exception ex) {
+            ServerUtilities.LOGGER.error("Failed to start Aurora on port " + port, ex);
+            stopAfterFailedStart();
+            return false;
+        }
     }
 
-    void shutdown() {
+    synchronized void shutdown() {
+        if (stopped) {
+            return;
+        }
+        stopped = true;
+        try {
+            if (channel != null) {
+                channel.channel().close().sync();
+            }
+        } catch (InterruptedException ex) {
+            ServerUtilities.LOGGER.warn("Interrupted while stopping Aurora", ex);
+            Thread.currentThread().interrupt();
+        } finally {
+            slaveGroup.shutdownGracefully();
+            masterGroup.shutdownGracefully();
+            removeShutdownHook();
+        }
+    }
+
+    private synchronized void stopAfterFailedStart() {
+        if (stopped) {
+            return;
+        }
+        stopped = true;
+        if (channel != null && channel.channel() != null) {
+            channel.channel().close();
+        }
         slaveGroup.shutdownGracefully();
         masterGroup.shutdownGracefully();
-
-        try {
-            channel.channel().closeFuture().sync();
-        } catch (InterruptedException ignored) {}
+        removeShutdownHook();
     }
 
-    private void handleRequest(SocketChannel channel, ChannelHandlerContext ctx, FullHttpRequest request) {
+    private void removeShutdownHook() {
+        if (shutdownHook == null || Thread.currentThread() == shutdownHook) {
+            return;
+        }
+        try {
+            Runtime.getRuntime().removeShutdownHook(shutdownHook);
+        } catch (IllegalStateException ex) {
+            // The JVM is already shutting down, so the hook no longer needs removal.
+        } finally {
+            shutdownHook = null;
+        }
+    }
+
+    boolean eventLoopsAreShuttingDown() {
+        return masterGroup.isShuttingDown() && slaveGroup.isShuttingDown();
+    }
+
+    private void handleRequest(ChannelHandlerContext ctx, FullHttpRequest request) {
         String uri = request.getUri();
         WebPage page;
 
@@ -137,7 +197,7 @@ public class AuroraServer {
                 }
             } catch (Exception ex) {
                 page = new WebPageNotFound("errored");
-                ex.printStackTrace();
+                ServerUtilities.LOGGER.error("Failed to resolve Aurora page " + uri, ex);
             }
         }
 
@@ -148,7 +208,7 @@ public class AuroraServer {
             content = page.getContent();
             contentType = page.getContentType();
         } catch (Exception ex) {
-            ex.printStackTrace();
+            ServerUtilities.LOGGER.error("Failed to render Aurora page " + uri, ex);
             StringWriter writer = new StringWriter();
             PrintWriter printWriter = new PrintWriter(writer);
             printWriter.println("Error!");
@@ -158,19 +218,26 @@ public class AuroraServer {
             contentType = "text/plain";
         }
 
+        byte[] contentBytes = content.getBytes(StandardCharsets.UTF_8);
         FullHttpResponse response = new DefaultFullHttpResponse(
                 HttpVersion.HTTP_1_1,
                 page.getStatus(),
-                Unpooled.copiedBuffer(content.getBytes()));
+                Unpooled.wrappedBuffer(contentBytes));
 
-        if (HttpHeaders.isKeepAlive(request)) {
+        boolean keepAlive = HttpHeaders.isKeepAlive(request);
+        if (keepAlive) {
             response.headers().set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
+        } else {
+            response.headers().set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
         }
 
         response.headers().set(HttpHeaders.Names.CONTENT_TYPE, contentType);
-        response.headers().set(HttpHeaders.Names.CONTENT_LENGTH, content.length());
+        response.headers().set(HttpHeaders.Names.CONTENT_LENGTH, contentBytes.length);
         response.headers().set(HttpHeaders.Names.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
-        ctx.writeAndFlush(response);
+        ChannelFuture responseFuture = ctx.writeAndFlush(response);
+        if (!keepAlive) {
+            responseFuture.addListener(ChannelFutureListener.CLOSE);
+        }
     }
 
     public boolean allow(String uri) {

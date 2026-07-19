@@ -77,7 +77,8 @@ public class GuiCreateTeam extends GuiBase {
         };
 
         textBoxId.setPosAndSize(8, 8, width - 16, 16);
-        textBoxId.writeText(Minecraft.getMinecraft().thePlayer.getGameProfile().getName().toLowerCase());
+        textBoxId.writeText(
+                Minecraft.getMinecraft().thePlayer.getGameProfile().getName().toLowerCase(java.util.Locale.ROOT));
         textBoxId.ghostText = "Enter ID"; // LANG
         textBoxId.textColor = color.getColor();
         textBoxId.setFocused(true);

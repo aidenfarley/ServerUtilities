@@ -124,8 +124,10 @@ public class NotificationHandler {
             if (!entry.getValue().isJsonObject()) continue;
 
             JsonObject obj = entry.getValue().getAsJsonObject();
-            group.getValue(entry.getKey())
-                    .setValueFromString(null, obj.getAsJsonPrimitive("location").getAsString().toLowerCase(), false);
+            group.getValue(entry.getKey()).setValueFromString(
+                    null,
+                    obj.getAsJsonPrimitive("location").getAsString().toLowerCase(java.util.Locale.ROOT),
+                    false);
             if (obj.has("lastReceived")) {
                 IChatComponent last = JsonUtils.deserializeTextComponent(obj.getAsJsonObject("lastReceived"));
                 lastMessages.put(entry.getKey(), last);

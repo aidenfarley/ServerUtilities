@@ -104,7 +104,7 @@ public class ServerUtilitiesCommon {
         ServerUtilitiesRegistry.registerDefaults();
         ServerUtilitiesPermissions.init();
         CHAT_FORMATTING_SUBSTITUTES.put("name", ForgePlayer::getDisplayName);
-        CHAT_FORMATTING_SUBSTITUTES.put("team", player -> player.team.getTitle());
+        CHAT_FORMATTING_SUBSTITUTES.put("team", player -> player.getTeam().getTitle());
     }
 
     public void postInit(FMLPostInitializationEvent event) {
@@ -146,7 +146,7 @@ public class ServerUtilitiesCommon {
                 ? Rank.NODE_COMMAND + '.' + cmdPerm.serverutilities$getModId() + "." + literalNode.getLiteral()
                 : parentNode + "." + literalNode.getLiteral();
 
-        cmdPerm.serverutilities$setPermissionNode(node.toLowerCase());
+        cmdPerm.serverutilities$setPermissionNode(node.toLowerCase(java.util.Locale.ROOT));
         cmdPerm.serverUtilities$registerPermissions();
 
         for (CommandNode<?> child : literalNode.getChildren()) {

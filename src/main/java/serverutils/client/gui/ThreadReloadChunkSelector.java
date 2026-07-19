@@ -272,7 +272,7 @@ public class ThreadReloadChunkSelector extends Thread {
                 pixelBuffer = PIXELS.toByteBuffer(false);
             }
         } catch (Exception ex) {
-            ex.printStackTrace();
+            serverutils.ServerUtilities.LOGGER.error("Failed to render the chunk selector", ex);
         }
 
         pixelBuffer = PIXELS.toByteBuffer(false);

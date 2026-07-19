@@ -381,7 +381,7 @@ public abstract class GuiBase extends Panel implements IOpenableGui {
                                 try {
                                     FilesUtil.openUri(uri);
                                 } catch (Exception ex) {
-                                    ex.printStackTrace();
+                                    serverutils.ServerUtilities.LOGGER.error("Failed to open URI " + uri, ex);
                                 }
                             }
                             Minecraft.getMinecraft().displayGuiScreen(currentScreen);
@@ -392,7 +392,7 @@ public abstract class GuiBase extends Panel implements IOpenableGui {
 
                     return true;
                 } catch (Exception ex) {
-                    ex.printStackTrace();
+                    serverutils.ServerUtilities.LOGGER.error("Failed to open link " + scheme + ':' + path, ex);
                 }
 
                 return false;
@@ -402,7 +402,7 @@ public abstract class GuiBase extends Panel implements IOpenableGui {
                     FilesUtil.openUri(new URI("file:" + path));
                     return true;
                 } catch (Exception ex) {
-                    ex.printStackTrace();
+                    serverutils.ServerUtilities.LOGGER.error("Failed to open file " + path, ex);
                 }
 
                 return false;

@@ -136,7 +136,8 @@ public class CheckBoxList extends Button {
     public List<CheckBoxEntry> getActiveEntries() {
         if (getGui() instanceof GuiButtonListBase btnList && btnList.hasSearchBox()
                 && !btnList.getTextInSearchBox().isEmpty()) {
-            return entries.stream().filter(entry -> entry.name.toLowerCase().contains(btnList.getTextInSearchBox()))
+            return entries.stream().filter(
+                    entry -> entry.name.toLowerCase(java.util.Locale.ROOT).contains(btnList.getTextInSearchBox()))
                     .collect(Collectors.toList());
         }
         return entries;

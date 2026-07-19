@@ -93,7 +93,9 @@ public class ConfigColor extends ConfigValue {
 
                 return true;
             }
-        } catch (Exception ex) {}
+        } catch (NumberFormatException ignored) {
+            // Invalid user input is reported through the false return value.
+        }
 
         return false;
     }

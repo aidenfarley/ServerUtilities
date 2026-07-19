@@ -28,7 +28,7 @@ public class GuiAddRank extends GuiBase {
             @Override
             public void onClicked(MouseButton button) {
                 GuiHelper.playClickSound();
-                String text = textBoxId.getText().toLowerCase();
+                String text = textBoxId.getText().toLowerCase(java.util.Locale.ROOT);
                 if (!text.isEmpty()) {
                     getGui().closeGui(true);
                     ClientUtils.execClientCommand("/ranks create " + text);

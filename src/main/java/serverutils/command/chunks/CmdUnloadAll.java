@@ -48,7 +48,7 @@ public class CmdUnloadAll extends CmdBase {
         if (p.hasTeam()) {
             OptionalInt dimension = CommandUtils.parseDimension(sender, args, 0);
 
-            for (ClaimedChunk chunk : ClaimedChunks.instance.getTeamChunks(p.team, dimension)) {
+            for (ClaimedChunk chunk : ClaimedChunks.instance.getTeamChunks(p.getTeam(), dimension)) {
                 chunk.setLoaded(false);
             }
 

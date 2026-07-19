@@ -15,7 +15,7 @@ import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 import serverutils.ServerUtilities;
 import serverutils.ServerUtilitiesConfig;
-import serverutils.ServerUtilitiesRegistry;
+import serverutils.api.ServerUtilitiesRegistry;
 import serverutils.events.SyncGamerulesEvent;
 import serverutils.lib.client.ClientUtils;
 import serverutils.lib.data.ForgePlayer;
@@ -45,10 +45,10 @@ public class MessageSyncData extends MessageToClient {
         boolean op = MinecraftServer.getServer().getConfigurationManager().func_152596_g(player.getGameProfile());
         flags = Bits.setFlag(0, LOGIN, login);
         flags = Bits.setFlag(flags, OP, op);
-        universeId = forgePlayer.team.universe.getUUID();
+        universeId = forgePlayer.getUniverse().getUUID();
         syncData = new NBTTagCompound();
 
-        for (Map.Entry<String, ISyncData> entry : ServerUtilitiesRegistry.SYNCED_DATA.entrySet()) {
+        for (Map.Entry<String, ISyncData> entry : ServerUtilitiesRegistry.syncDataView().entrySet()) {
             syncData.setTag(entry.getKey(), entry.getValue().writeSyncData(player, forgePlayer));
         }
 
@@ -89,7 +89,7 @@ public class MessageSyncData extends MessageToClient {
     @SideOnly(Side.CLIENT)
     public void onMessage() {
         for (String key : syncData.func_150296_c()) {
-            ISyncData nbt = ServerUtilitiesRegistry.SYNCED_DATA.get(key);
+            ISyncData nbt = ServerUtilitiesRegistry.findSyncData(key);
 
             if (nbt != null) {
                 nbt.readSyncData(syncData.getCompoundTag(key));

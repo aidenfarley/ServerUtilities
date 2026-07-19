@@ -108,8 +108,8 @@ public class GuiRanks extends GuiButtonListBase {
     }
 
     public void removeRank(SimpleTextButton btn) {
-        ClientUtils.execClientCommand("/ranks delete " + btn.getTitle().toLowerCase());
-        ranks.remove(btn.getTitle().toLowerCase());
+        ClientUtils.execClientCommand("/ranks delete " + btn.getTitle().toLowerCase(java.util.Locale.ROOT));
+        ranks.remove(btn.getTitle().toLowerCase(java.util.Locale.ROOT));
         panelButtons.widgets.remove(btn);
         refreshWidgets();
     }

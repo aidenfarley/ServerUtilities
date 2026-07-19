@@ -141,6 +141,7 @@ public class PermissionListPage extends HTTPWebPage {
                 int max = configInt.getMax();
                 variants.add(
                         String.format(
+                                java.util.Locale.ROOT,
                                 "%s to %s",
                                 min == Integer.MIN_VALUE ? "-&infin;" : String.valueOf(min),
                                 max == Integer.MAX_VALUE ? "&infin;" : String.valueOf(max)));
@@ -150,12 +151,14 @@ public class PermissionListPage extends HTTPWebPage {
 
                 variants.add(
                         String.format(
+                                java.util.Locale.ROOT,
                                 "%s to %s",
                                 min == Double.NEGATIVE_INFINITY ? "-&infin;" : StringUtils.formatDouble(min),
                                 max == Double.POSITIVE_INFINITY ? "&infin;" : StringUtils.formatDouble(max)));
             } else if (entry.player instanceof ConfigTimer configTimer) {
                 Ticks max = configTimer.getMax();
-                variants.add(String.format("0s to %s", !max.hasTicks() ? "&infin;" : max.toString()));
+                variants.add(
+                        String.format(java.util.Locale.ROOT, "0s to %s", !max.hasTicks() ? "&infin;" : max.toString()));
             } else {
                 variants = new ArrayList<>(entry.player.getVariants());
                 variants.sort(StringUtils.IGNORE_CASE_COMPARATOR);
@@ -222,7 +225,7 @@ public class PermissionListPage extends HTTPWebPage {
 
             Files.write(Paths.get("server-utilities-permissions.txt"), export2);
         } catch (IOException e) {
-            e.printStackTrace();
+            serverutils.ServerUtilities.LOGGER.error("Failed to export the permission list", e);
         }
     }
 }

@@ -58,7 +58,7 @@ public class CmdStart extends CmdBase {
                         new ChatComponentText("Initializing pregenerator. Check progress with '/pregen progress'."));
                 ChunkLoaderManager.instance.initializePregenerator(commandInfo, MinecraftServer.getServer());
             } catch (IOException e) {
-                e.printStackTrace();
+                serverutils.ServerUtilities.LOGGER.error("Failed to start the pregenerator", e);
                 sender.addChatMessage(
                         new ChatComponentText(
                                 "Cannot start a pregenerator! File exception when starting pregenerator!"));

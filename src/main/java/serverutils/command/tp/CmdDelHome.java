@@ -36,7 +36,7 @@ public class CmdDelHome extends CmdBase {
             args = new String[] { "home" };
         }
 
-        args[0] = args[0].toLowerCase();
+        args[0] = args[0].toLowerCase(java.util.Locale.ROOT);
 
         if (data.homes.set(args[0], null)) {
             sender.addChatMessage(ServerUtilities.lang(sender, "serverutilities.lang.homes.del", args[0]));

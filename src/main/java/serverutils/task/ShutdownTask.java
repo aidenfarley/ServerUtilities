@@ -38,14 +38,28 @@ public class ShutdownTask extends Task {
             try {
                 String[] s = s0.split(":", 2);
 
-                int t = Integer.parseInt(s[0]) * 3600 + Integer.parseInt(s[1]) * 60;
+                if (s.length != 2) {
+                    throw new NumberFormatException("Expected HH:mm");
+                }
+
+                int hour = Integer.parseInt(s[0]);
+                int minute = Integer.parseInt(s[1]);
+
+                if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+                    throw new NumberFormatException("Time is outside the 00:00-23:59 range");
+                }
+
+                int t = hour * 3600 + minute * 60;
 
                 if (t <= currentTime) {
                     t += 24 * 3600;
                 }
 
                 times.add(t);
-            } catch (Exception ignored) {}
+            } catch (NumberFormatException ex) {
+                ServerUtilities.LOGGER
+                        .warn("Ignoring invalid automatic shutdown time '" + s0 + "': " + ex.getMessage());
+            }
         }
 
         times.sort(null);

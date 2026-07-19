@@ -55,7 +55,7 @@ public class Leaderboard {
         public static final IntFunction<IChatComponent> DEFAULT = value -> new ChatComponentText(
                 value <= 0 ? "0" : Integer.toString(value));
         public static final DoubleFunction<IChatComponent> PERCENTAGE = value -> new ChatComponentText(
-                String.format("%.2f%%", value * 100.0));
+                String.format(java.util.Locale.ROOT, "%.2f%%", value * 100.0));
         public static final IntFunction<IChatComponent> TIME = value -> new ChatComponentText(
                 "[" + (int) (value / 72000D + 0.5D) + "h] " + Ticks.get(value).toTimeString());
         public static final LongFunction<IChatComponent> LONG_TIME = value -> new ChatComponentText(

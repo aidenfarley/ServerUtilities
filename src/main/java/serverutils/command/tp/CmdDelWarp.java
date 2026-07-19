@@ -29,7 +29,7 @@ public class CmdDelWarp extends CmdBase {
     public void processCommand(ICommandSender sender, String[] args) throws CommandException {
         checkArgs(sender, args, 1);
 
-        args[0] = args[0].toLowerCase();
+        args[0] = args[0].toLowerCase(java.util.Locale.ROOT);
 
         if (ServerUtilitiesUniverseData.WARPS.set(args[0], null)) {
             sender.addChatMessage(ServerUtilities.lang(sender, "serverutilities.lang.warps.del", args[0]));

@@ -8,7 +8,7 @@ import serverutils.lib.data.ISyncData;
 import serverutils.lib.data.TeamAction;
 
 /**
- * Deprecated. Use {@link serverutils.ServerUtilitiesRegistry} instead.
+ * Deprecated. Use {@link serverutils.api.ServerUtilitiesRegistry} instead.
  */
 @Deprecated
 public class ServerUtilitiesPreInitRegistryEvent extends ServerUtilitiesEvent {

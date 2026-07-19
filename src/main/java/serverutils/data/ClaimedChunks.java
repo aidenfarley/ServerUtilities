@@ -169,7 +169,7 @@ public class ClaimedChunks {
 
     public void addChunk(ClaimedChunk chunk) {
         pendingChunks.add(chunk);
-        chunk.getTeam().claimedChunks.add(chunk);
+        chunk.getTeam().addClaimedChunk(chunk);
         chunk.getTeam().markDirty();
         markDirty();
     }
@@ -190,13 +190,13 @@ public class ClaimedChunks {
         Set<ClaimedChunk> set;
         if (dimension.isPresent()) {
             set = new HashSet<>();
-            for (ClaimedChunk chunk : team.claimedChunks) {
+            for (ClaimedChunk chunk : team.getClaimedChunksView()) {
                 if (chunk.getPos().dim == dimension.getAsInt()) {
                     set.add(chunk);
                 }
             }
         } else {
-            set = new HashSet<>(team.claimedChunks);
+            set = new HashSet<>(team.getClaimedChunksView());
         }
 
         if (includePending) {
@@ -302,7 +302,7 @@ public class ClaimedChunks {
             return false;
         }
 
-        return player.hasTeam() && chunk.getTeam().equalsTeam(player.team) || perm.isEmpty()
+        return player.hasTeam() && chunk.getTeam().equalsTeam(player.getTeam()) || perm.isEmpty()
                 || player.hasPermission(perm);
     }
 
@@ -317,7 +317,7 @@ public class ClaimedChunks {
             return ClaimResult.DIMENSION_BLOCKED;
         }
 
-        ServerUtilitiesTeamData data = ServerUtilitiesTeamData.get(player.team);
+        ServerUtilitiesTeamData data = ServerUtilitiesTeamData.get(player.getTeam());
 
         if (checkLimits && !player.hasPermission(ServerUtilitiesPermissions.CLAIMS_BYPASS_LIMITS)) {
             int max = data.getMaxClaimChunks();

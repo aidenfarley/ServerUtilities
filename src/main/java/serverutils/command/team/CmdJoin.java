@@ -45,7 +45,7 @@ public class CmdJoin extends CmdBase {
                     list.sort(null);
                 }
             } catch (Exception ex) {
-                ex.printStackTrace();
+                ServerUtilities.LOGGER.error("Failed to build team tab completions", ex);
             }
 
             return getListOfStringsFromIterableMatchingLastWord(args, list);
@@ -68,9 +68,9 @@ public class CmdJoin extends CmdBase {
         ForgeTeam team = CommandUtils.getTeam(sender, args[0]);
 
         if (team.addMember(p, true)) {
-            if (p.team.isOwner(p)) {
-                new ForgeTeamChangedEvent(team, p.team).post();
-                p.team.removeMember(p);
+            if (p.getTeam().isOwner(p)) {
+                new ForgeTeamChangedEvent(team, p.getTeam()).post();
+                p.getTeam().removeMember(p);
             } else if (p.hasTeam()) {
                 throw ServerUtilities.error(sender, "serverutilities.lang.team.error.must_leave");
             }

@@ -93,6 +93,7 @@ public class CmdDumpPermissions extends CmdBase {
                 int max = configInt.getMax();
                 variants.add(
                         String.format(
+                                java.util.Locale.ROOT,
                                 "%s to %s",
                                 min == Integer.MIN_VALUE ? "∞" : String.valueOf(min),
                                 max == Integer.MAX_VALUE ? "∞" : String.valueOf(max)));
@@ -101,12 +102,13 @@ public class CmdDumpPermissions extends CmdBase {
                 double max = configDouble.getMax();
                 variants.add(
                         String.format(
+                                java.util.Locale.ROOT,
                                 "%s to %s",
                                 min == Double.NEGATIVE_INFINITY ? "∞" : StringUtils.formatDouble(min),
                                 max == Double.POSITIVE_INFINITY ? '∞' : StringUtils.formatDouble(max)));
             } else if (entry.player instanceof ConfigTimer configTimer) {
                 Ticks max = configTimer.getMax();
-                variants.add(String.format("0s to %s", !max.hasTicks() ? "∞" : max.toString()));
+                variants.add(String.format(java.util.Locale.ROOT, "0s to %s", !max.hasTicks() ? "∞" : max.toString()));
             } else {
                 variants = new ArrayList<>(entry.player.getVariants());
                 variants.sort(StringUtils.IGNORE_CASE_COMPARATOR);

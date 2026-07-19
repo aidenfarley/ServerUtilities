@@ -69,7 +69,7 @@ public class GuiSelectItemStack extends GuiBase {
                 return GameData.getItemRegistry().getNameForObject(stack.getItem()).contains(mod);
             }
 
-            return stack.getDisplayName().toLowerCase().contains(search);
+            return stack.getDisplayName().toLowerCase(java.util.Locale.ROOT).contains(search);
         }
 
         @Override
@@ -341,7 +341,7 @@ public class GuiSelectItemStack extends GuiBase {
         public ThreadItemList() {
             super("Item Search Thread");
             setDaemon(true);
-            search = searchBox.getText().toLowerCase();
+            search = searchBox.getText().toLowerCase(java.util.Locale.ROOT);
         }
 
         @Override
@@ -534,9 +534,7 @@ public class GuiSelectItemStack extends GuiBase {
 
     private void stopSearch() {
         if (threadItemList != null) {
-            try {
-                threadItemList.interrupt();
-            } catch (Exception ex) {}
+            threadItemList.interrupt();
         }
 
         threadItemList = null;

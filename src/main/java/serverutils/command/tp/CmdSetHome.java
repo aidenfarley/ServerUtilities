@@ -41,7 +41,7 @@ public class CmdSetHome extends CmdBase {
             args = new String[] { "home" };
         }
 
-        args[0] = args[0].toLowerCase();
+        args[0] = args[0].toLowerCase(java.util.Locale.ROOT);
 
         int maxHomes = RankConfigAPI.get(player, ServerUtilitiesPermissions.HOMES_MAX).getInt();
 

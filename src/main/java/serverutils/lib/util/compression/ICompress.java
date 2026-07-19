@@ -17,6 +17,20 @@ public interface ICompress extends AutoCloseable {
 
     void extractArchive(File archive, boolean includeGlobal, boolean isOldBackup) throws IOException;
 
+    default void extractArchiveTo(File extractionRoot, File archive, boolean includeGlobal, boolean isOldBackup)
+            throws IOException {
+        if (!extractionRoot.getAbsoluteFile().equals(new File("").getAbsoluteFile())) {
+            throw new IOException("This compressor does not support an alternate extraction directory");
+        }
+
+        extractArchive(archive, includeGlobal, isOldBackup);
+    }
+
+    default void extractArchiveTo(File extractionRoot, File archive, boolean includeGlobal, boolean isOldBackup,
+            @Nullable String worldName) throws IOException {
+        extractArchiveTo(extractionRoot, archive, includeGlobal, isOldBackup);
+    }
+
     boolean isOldBackup(File archive) throws IOException;
 
     @Nullable

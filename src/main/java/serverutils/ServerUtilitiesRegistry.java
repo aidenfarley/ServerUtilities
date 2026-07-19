@@ -61,32 +61,63 @@ import serverutils.ranks.Ranks;
 @SuppressWarnings("unused")
 public class ServerUtilitiesRegistry {
 
+    @Deprecated
     public static final Map<ResourceLocation, IReloadHandler> RELOAD_IDS = new HashMap<>();
+    @Deprecated
     public static final Map<ResourceLocation, TeamAction> TEAM_GUI_ACTIONS = new HashMap<>();
+    @Deprecated
     public static final Map<ResourceLocation, AdminPanelAction> ADMIN_PANEL_ACTIONS = new HashMap<>();
+    @Deprecated
     public static final Map<String, ConfigValueProvider> CONFIG_VALUE_PROVIDERS = new HashMap<>();
+    @Deprecated
     public static final Map<String, ISyncData> SYNCED_DATA = new HashMap<>();
 
+    /**
+     * @deprecated Use
+     *             {@link serverutils.api.ServerUtilitiesRegistry#registerConfigValueProvider(String, ConfigValueProvider)}.
+     */
+    @Deprecated
     public static void registerConfigValueProvider(String id, ConfigValueProvider provider) {
         CONFIG_VALUE_PROVIDERS.put(id, provider);
     }
 
+    /**
+     * @deprecated Use {@link serverutils.api.ServerUtilitiesRegistry#registerSyncData(String, ISyncData)}.
+     */
+    @Deprecated
     public static void registerSyncData(String mod, ISyncData data) {
         SYNCED_DATA.put(mod, data);
     }
 
+    /**
+     * @deprecated Use
+     *             {@link serverutils.api.ServerUtilitiesRegistry#registerServerReloadHandler(ResourceLocation, IReloadHandler)}.
+     */
+    @Deprecated
     public static void registerServerReloadHandler(ResourceLocation id, IReloadHandler handler) {
         RELOAD_IDS.put(id, handler);
     }
 
+    /**
+     * @deprecated Use {@link serverutils.api.ServerUtilitiesRegistry#registerAdminPanelAction(AdminPanelAction)}.
+     */
+    @Deprecated
     public static void registerAdminPanelAction(AdminPanelAction action) {
         ADMIN_PANEL_ACTIONS.put(action.getId(), action);
     }
 
+    /**
+     * @deprecated Use {@link serverutils.api.ServerUtilitiesRegistry#registerTeamAction(TeamAction)}.
+     */
+    @Deprecated
     public static void registerTeamAction(TeamAction action) {
         TEAM_GUI_ACTIONS.put(action.getId(), action);
     }
 
+    /**
+     * @deprecated Use {@link serverutils.api.ServerUtilitiesRegistry#registerInvseeInventory(IModdedInventory)}.
+     */
+    @Deprecated
     @ApiStatus.AvailableSince("2.4.0")
     public static void registerInvseeInventory(IModdedInventory inventory) {
         InvSeeRegistry.registerInventory(inventory);
@@ -153,7 +184,7 @@ public class ServerUtilitiesRegistry {
             @Override
             public void onAction(ForgePlayer player, NBTTagCompound data) {
                 ServerUtilitiesAPI.reloadServer(
-                        player.team.universe,
+                        player.getUniverse(),
                         player.getPlayer(),
                         EnumReloadType.RELOAD_COMMAND,
                         ServerReloadEvent.ALL);
@@ -169,7 +200,7 @@ public class ServerUtilitiesRegistry {
 
                     @Override
                     public void onAction(ForgePlayer player, NBTTagCompound data) {
-                        new MessageViewCrashList(player.team.universe.server.getFile("crash-reports"))
+                        new MessageViewCrashList(player.getUniverse().server.getFile("crash-reports"))
                                 .sendTo(player.getPlayer());
                     }
                 });
@@ -190,7 +221,7 @@ public class ServerUtilitiesRegistry {
                     ConfigGroup gamerules = main.getGroup("gamerules");
                     gamerules.setDisplayName(new ChatComponentTranslation("gamerules"));
 
-                    GameRules rules = player.team.universe.world.getGameRules();
+                    GameRules rules = player.getUniverse().world.getGameRules();
 
                     for (String key : rules.getRules()) {
                         String value = rules.getGameRuleStringValue(key);

@@ -76,7 +76,7 @@ public class ServerUtilitiesPlayerEventHandler {
             ClaimedChunks.instance.markDirty();
         }
 
-        ForgeTeam team = event.getPlayer().team;
+        ForgeTeam team = event.getPlayer().getTeam();
         ServerUtilitiesTeamData data = ServerUtilitiesTeamData.get(team);
 
         if (team.isValid()) {
@@ -198,7 +198,7 @@ public class ServerUtilitiesPlayerEventHandler {
     }
 
     private static String getPos(int x, int y, int z) {
-        return String.format("[%d, %d, %d]", x, y, z);
+        return String.format(java.util.Locale.ROOT, "[%d, %d, %d]", x, y, z);
     }
 
     private static String getHeldItemName(EntityPlayer player) {
@@ -213,6 +213,7 @@ public class ServerUtilitiesPlayerEventHandler {
         if (ServerUtilitiesConfig.world.logging.block_broken && ServerUtilitiesConfig.world.logging.log(playerMP)) {
             ServerUtilitiesUniverseData.worldLog(
                     String.format(
+                            java.util.Locale.ROOT,
                             "%s broke %s at %s in %s",
                             playerMP.getCommandSenderName(),
                             getStateName(event.world, event.x, event.y, event.z),
@@ -228,6 +229,7 @@ public class ServerUtilitiesPlayerEventHandler {
         if (ServerUtilitiesConfig.world.logging.block_placed && ServerUtilitiesConfig.world.logging.log(playerMP)) {
             ServerUtilitiesUniverseData.worldLog(
                     String.format(
+                            java.util.Locale.ROOT,
                             "%s placed %s at %s in %s",
                             playerMP.getCommandSenderName(),
                             getStateName(event.world, event.x, event.y, event.z),
@@ -245,6 +247,7 @@ public class ServerUtilitiesPlayerEventHandler {
                 && ServerUtilitiesConfig.world.logging.log(playerMP)) {
             ServerUtilitiesUniverseData.worldLog(
                     String.format(
+                            java.util.Locale.ROOT,
                             "%s clicked %s in air at %s in %s",
                             playerMP.getCommandSenderName(),
                             getHeldItemName(playerMP),
@@ -263,6 +266,7 @@ public class ServerUtilitiesPlayerEventHandler {
             if (print) {
                 ServerUtilitiesUniverseData.worldLog(
                         String.format(
+                                java.util.Locale.ROOT,
                                 "%s attacked %s with %s at %s in %s",
                                 playerMP.getCommandSenderName(),
                                 target.getCommandSenderName(),

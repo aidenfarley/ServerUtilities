@@ -43,7 +43,8 @@ public final class ServerUtilitiesLeaderboards {
                         new ChatComponentTranslation("serverutilities.stat.dph"),
                         player -> {
                             double d = getDPH(player);
-                            return new ChatComponentText(d < 0D ? "-" : String.format("%.2f", d));
+                            return new ChatComponentText(
+                                    d < 0D ? "-" : String.format(java.util.Locale.ROOT, "%.2f", d));
                         },
                         Comparator.comparingDouble(ServerUtilitiesLeaderboards::getDPH).reversed(),
                         player -> getDPH(player) >= 0D));
@@ -71,7 +72,7 @@ public final class ServerUtilitiesLeaderboards {
                                 component.getChatStyle().setColor(EnumChatFormatting.GREEN);
                                 return component;
                             } else {
-                                long worldTime = player.team.universe.world.getTotalWorldTime();
+                                long worldTime = player.getUniverse().world.getTotalWorldTime();
                                 long time = worldTime - player.getLastTimeSeen();
                                 return Leaderboard.FromStat.LONG_TIME.apply(time);
                             }
@@ -99,7 +100,7 @@ public final class ServerUtilitiesLeaderboards {
             return 0;
         }
 
-        return player.team.universe.ticks.ticks() - player.getLastTimeSeen();
+        return player.getUniverse().ticks.ticks() - player.getLastTimeSeen();
     }
 
     private static double getDPH(ForgePlayer player) {

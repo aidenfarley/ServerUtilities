@@ -72,7 +72,7 @@ public class CmdClaimAs extends CmdBase {
                 UUID.nameUUIDFromBytes("FakePlayerClaimAs".getBytes(StandardCharsets.UTF_8)),
                 "FakePlayerClaimAs");
 
-        p.team = team;
+        p.setTeam(team);
         ChunkDimPos pos = new ChunkDimPos(player);
 
         for (int x = -radius; x <= radius; x++) {

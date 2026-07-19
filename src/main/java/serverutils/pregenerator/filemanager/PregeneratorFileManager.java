@@ -58,8 +58,9 @@ public class PregeneratorFileManager {
                             commandReadWriter.readInt(),
                             commandReadWriter.readInt(),
                             iterationReadWriter.readInt()));
-        } catch (IOException ignored) {} // Ignoring this because often there's just nothing in the file if you're
-                                         // loading a world
+        } catch (IOException ignored) {
+            // A world commonly has no saved pregenerator command.
+        }
         return Optional.empty();
     }
 
@@ -67,7 +68,7 @@ public class PregeneratorFileManager {
         try {
             iterationReadWriter.writeAndCommitIntAfterIterations(iteration);
         } catch (IOException e) {
-            e.printStackTrace();
+            serverutils.ServerUtilities.LOGGER.error("Failed to update the pregenerator iteration file", e);
         }
     }
 
@@ -78,7 +79,7 @@ public class PregeneratorFileManager {
             commandReadWriter.close();
             commandReadWriter.deleteFile();
         } catch (IOException e) {
-            e.printStackTrace();
+            serverutils.ServerUtilities.LOGGER.error("Failed to delete the pregenerator command file", e);
         }
     }
 
@@ -87,7 +88,7 @@ public class PregeneratorFileManager {
             iterationReadWriter.close();
             commandReadWriter.close();
         } catch (IOException e) {
-            e.printStackTrace();
+            serverutils.ServerUtilities.LOGGER.error("Failed to close pregenerator files", e);
         }
     }
 

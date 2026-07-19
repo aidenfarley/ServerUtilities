@@ -157,7 +157,7 @@ public class ServerUtilitiesUniverseData {
                         out.println(s);
                     }
                 } catch (IOException ex) {
-                    ex.printStackTrace();
+                    serverutils.ServerUtilities.LOGGER.error("Failed to append the world log", ex);
                 }
 
                 return false;
@@ -178,7 +178,7 @@ public class ServerUtilitiesUniverseData {
                         out.println(s);
                     }
                 } catch (IOException ex) {
-                    ex.printStackTrace();
+                    serverutils.ServerUtilities.LOGGER.error("Failed to append the chat log", ex);
                 }
 
                 return false;

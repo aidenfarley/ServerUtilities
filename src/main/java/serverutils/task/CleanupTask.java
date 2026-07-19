@@ -87,7 +87,7 @@ public class CleanupTask extends Task {
 
         String finalString = StatCollector.translateToLocalFormatted(
                 "serverutilities.task.cleanup_entity",
-                builder.toString().toLowerCase(),
+                builder.toString().toLowerCase(java.util.Locale.ROOT),
                 seconds);
 
         return StringUtils.color(new ChatComponentText(finalString), EnumChatFormatting.LIGHT_PURPLE);

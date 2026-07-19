@@ -4,7 +4,6 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -19,19 +18,15 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.event.ClickEvent;
 import net.minecraft.event.HoverEvent;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.nbt.NBTTagList;
-import net.minecraft.nbt.NBTTagString;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.ChatComponentTranslation;
 import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.IChatComponent;
-import net.minecraftforge.common.util.Constants;
 
 import serverutils.ServerUtilities;
 import serverutils.data.ClaimedChunk;
 import serverutils.events.team.ForgeTeamConfigEvent;
 import serverutils.events.team.ForgeTeamConfigSavedEvent;
-import serverutils.events.team.ForgeTeamDataEvent;
 import serverutils.events.team.ForgeTeamOwnerChangedEvent;
 import serverutils.events.team.ForgeTeamPlayerJoinedEvent;
 import serverutils.events.team.ForgeTeamPlayerLeftEvent;
@@ -54,42 +49,46 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
     private final short uid;
     public final Universe universe;
     public final TeamType type;
+    /** @deprecated Use {@link #getOwner()} and team ownership methods. */
+    @Deprecated
     public ForgePlayer owner;
-    private final NBTDataStorage dataStorage;
-    private String title;
-    private String desc;
-    private EnumTeamColor color;
-    private String icon;
-    private boolean freeToJoin;
-    private EnumTeamStatus fakePlayerStatus;
-    private final Collection<ForgePlayer> requestingInvite;
+    private final ForgeTeamPersistence persistence;
+    private final ForgeTeamMembership membership;
+    /** @deprecated Use status and membership methods or {@link #getPlayerStatusesView()}. */
+    @Deprecated
     public final Map<ForgePlayer, EnumTeamStatus> players;
     private ConfigGroup cachedConfig;
     private IChatComponent cachedTitle;
     private Icon cachedIcon;
+    /** @deprecated Use {@link #isDirty()}, {@link #markDirty()}, and {@link #markSaved()}. */
+    @Deprecated
     public boolean needsSaving;
-    private long lastActivity;
+    /** @deprecated Use claimed-chunk mutation methods and {@link #getClaimedChunksView()}. */
+    @Deprecated
     public final Set<ClaimedChunk> claimedChunks = new HashSet<>();
 
     public ForgeTeam(Universe u, short id, String n, TeamType t) {
+        this(u, id, n, t, true);
+    }
+
+    ForgeTeam(Universe u, short id, String n, TeamType t, boolean initializePersistence) {
         super(n, t.isNone ? 0 : (StringUtils.FLAG_ID_DEFAULTS | StringUtils.FLAG_ID_ALLOW_EMPTY));
         uid = id;
         universe = u;
         type = t;
-        title = "";
-        desc = "";
-        color = EnumTeamColor.BLUE;
-        icon = "";
-        freeToJoin = false;
-        fakePlayerStatus = EnumTeamStatus.ALLY;
-        requestingInvite = new HashSet<>();
-        players = new HashMap<>();
-        dataStorage = new NBTDataStorage();
-        new ForgeTeamDataEvent(this, dataStorage).post();
+        membership = new ForgeTeamMembership();
+        players = membership.mutableStatuses();
+        persistence = new ForgeTeamPersistence();
+        if (initializePersistence) {
+            persistence.initialize(this);
+        }
         clearCache();
         cachedIcon = null;
         needsSaving = false;
-        lastActivity = 0L;
+    }
+
+    void initializePersistence() {
+        persistence.initialize(this);
     }
 
     public final short getUID() {
@@ -97,124 +96,124 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
     }
 
     public final int hashCode() {
-        return uid;
+        return 31 * System.identityHashCode(universe) + uid;
     }
 
     public final boolean equals(Object o) {
-        return o == this || uid == Objects.hashCode(o);
+        return o == this || o instanceof ForgeTeam other && universe == other.universe && uid == other.uid;
     }
 
     public final String getUIDCode() {
-        return String.format("%04X", uid);
+        return String.format(java.util.Locale.ROOT, "%04X", uid);
     }
 
     @Override
     public NBTTagCompound serializeNBT() {
-        NBTTagCompound nbt = new NBTTagCompound();
-        if (owner != null) {
-            nbt.setString("Owner", owner.getName());
-        }
-
-        nbt.setString("Title", title);
-        nbt.setString("Desc", desc);
-        nbt.setString("Color", EnumTeamColor.NAME_MAP.getName(color));
-        nbt.setString("Icon", icon);
-        nbt.setBoolean("FreeToJoin", freeToJoin);
-        nbt.setString("FakePlayerStatus", EnumTeamStatus.NAME_MAP_PERMS.getName(fakePlayerStatus));
-        nbt.setLong("LastActivity", lastActivity);
-
-        NBTTagCompound nbt1 = new NBTTagCompound();
-
-        if (!players.isEmpty()) {
-            for (Map.Entry<ForgePlayer, EnumTeamStatus> entry : players.entrySet()) {
-                nbt1.setString(entry.getKey().getName(), entry.getValue().getName());
-            }
-        }
-
-        nbt.setTag("Players", nbt1);
-
-        NBTTagList list = new NBTTagList();
-
-        for (ForgePlayer player : requestingInvite) {
-            list.appendTag(new NBTTagString(player.getName()));
-        }
-
-        nbt.setTag("RequestingInvite", list);
-        nbt.setTag("Data", dataStorage.serializeNBT());
-        return nbt;
+        return persistence.serialize(this, membership);
     }
 
     @Override
     public void deserializeNBT(NBTTagCompound nbt) {
-        owner = universe.getPlayer(nbt.getString("Owner"));
-
-        if (!isValid()) {
-            return;
-        }
-
-        title = nbt.getString("Title");
-        desc = nbt.getString("Desc");
-        color = EnumTeamColor.NAME_MAP.get(nbt.getString("Color"));
-        icon = nbt.getString("Icon");
-        freeToJoin = nbt.getBoolean("FreeToJoin");
-        fakePlayerStatus = EnumTeamStatus.NAME_MAP_PERMS.get(nbt.getString("FakePlayerStatus"));
-        lastActivity = nbt.getLong("LastActivity");
-
-        players.clear();
-
-        if (nbt.hasKey("Players")) {
-            NBTTagCompound nbt1 = nbt.getCompoundTag("Players");
-
-            for (String s : nbt1.func_150296_c()) {
-                ForgePlayer player = universe.getPlayer(s);
-
-                if (player != null) {
-                    EnumTeamStatus status = EnumTeamStatus.NAME_MAP.get(nbt1.getString(s));
-
-                    if (status.canBeSet()) {
-                        setStatus(player, status);
-                    }
-                }
-            }
-        }
-
-        NBTTagList list = nbt.getTagList("RequestingInvite", Constants.NBT.TAG_STRING);
-
-        for (int i = 0; i < list.tagCount(); i++) {
-            ForgePlayer player = universe.getPlayer(list.getStringTagAt(i));
-
-            if (player != null && !isMember(player)) {
-                setRequestingInvite(player, true);
-            }
-        }
-
-        list = nbt.getTagList("Invited", Constants.NBT.TAG_STRING);
-
-        for (int i = 0; i < list.tagCount(); i++) {
-            ForgePlayer player = universe.getPlayer(list.getStringTagAt(i));
-
-            if (player != null && !isMember(player)) {
-                setStatus(player, EnumTeamStatus.INVITED);
-            }
-        }
-
-        dataStorage.deserializeNBT(nbt.getCompoundTag("Data"));
+        persistence.deserialize(this, membership, nbt);
     }
 
     public void clearCache() {
         cachedTitle = null;
         cachedIcon = null;
         cachedConfig = null;
-        dataStorage.clearCache();
+        persistence.clearCache();
     }
 
     public void markDirty() {
         needsSaving = true;
-        universe.checkSaving = true;
+        universe.markChildDirty();
+    }
+
+    public boolean isDirty() {
+        return needsSaving;
+    }
+
+    public void markSaved() {
+        needsSaving = false;
+    }
+
+    public void initializeOwner(ForgePlayer player) {
+        Objects.requireNonNull(player, "player");
+        if (!type.isPlayer) {
+            throw new IllegalStateException("Only player teams can have an owner");
+        }
+        requireSameUniverse(player);
+        if (owner != null && owner != player) {
+            throw new IllegalStateException("Team owner has already been initialized");
+        }
+
+        if (player.getTeam() != this) {
+            player.setTeam(this);
+        }
+        if (owner == player) {
+            return;
+        }
+
+        owner = player;
+        universe.clearCache();
+        player.markDirty();
+        markDirty();
+    }
+
+    ForgePlayer getStoredOwner() {
+        return owner;
+    }
+
+    void setStoredOwner(@Nullable ForgePlayer player) {
+        if (player != null) {
+            requireSameUniverse(player);
+        }
+        owner = player;
+    }
+
+    private void requireSameUniverse(ForgePlayer player) {
+        if (player.getUniverse() != universe) {
+            throw new IllegalArgumentException("Player and team belong to different universes");
+        }
+    }
+
+    public Map<ForgePlayer, EnumTeamStatus> getPlayerStatusesView() {
+        return membership.statusesView();
+    }
+
+    public Set<ClaimedChunk> getClaimedChunksView() {
+        return Collections.unmodifiableSet(claimedChunks);
+    }
+
+    public boolean addClaimedChunk(ClaimedChunk chunk) {
+        requireOwnedChunk(chunk);
+        if (claimedChunks.add(chunk)) {
+            clearCache();
+            markDirty();
+            return true;
+        }
+        return false;
+    }
+
+    public boolean removeClaimedChunk(ClaimedChunk chunk) {
+        requireOwnedChunk(chunk);
+        if (claimedChunks.remove(chunk)) {
+            clearCache();
+            markDirty();
+            return true;
+        }
+        return false;
+    }
+
+    private void requireOwnedChunk(ClaimedChunk chunk) {
+        Objects.requireNonNull(chunk, "chunk");
+        if (chunk.getTeam() != this) {
+            throw new IllegalArgumentException("Claimed chunk belongs to a different team");
+        }
     }
 
     public NBTDataStorage getData() {
-        return dataStorage;
+        return persistence.data();
     }
 
     @Nullable
@@ -227,11 +226,11 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
             return cachedTitle;
         }
 
-        if (title.isEmpty()) {
+        if (persistence.title().isEmpty()) {
             cachedTitle = getOwner() != null ? getOwner().getDisplayName().appendText("'s Team")
                     : new ChatComponentTranslation("serverutilities.lang.team.no_team");
         } else {
-            cachedTitle = new ChatComponentText(title);
+            cachedTitle = new ChatComponentText(persistence.title());
         }
 
         cachedTitle = StringUtils.color(cachedTitle, getColor().getEnumChatFormatting());
@@ -254,44 +253,47 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
     }
 
     public void setTitle(String s) {
-        if (!title.equals(s)) {
-            title = s;
+        if (!persistence.title().equals(s)) {
+            persistence.title(s);
+            cachedTitle = null;
             markDirty();
         }
     }
 
     public String getDesc() {
-        return desc;
+        return persistence.description();
     }
 
     public void setDesc(String s) {
-        if (!desc.equals(s)) {
-            desc = s;
+        if (!persistence.description().equals(s)) {
+            persistence.description(s);
             markDirty();
         }
     }
 
     public EnumTeamColor getColor() {
-        return color;
+        return persistence.color();
     }
 
     public void setColor(EnumTeamColor col) {
-        if (color != col) {
-            color = col;
+        if (persistence.color() != col) {
+            persistence.color(col);
+            cachedTitle = null;
+            cachedIcon = null;
             markDirty();
         }
     }
 
     public Icon getIcon() {
         if (cachedIcon == null) {
-            if (icon.isEmpty()) {
+            if (persistence.icon().isEmpty()) {
                 if (getOwner() != null) {
                     cachedIcon = new PlayerHeadIcon(getOwner().getProfile().getId());
                 } else {
                     cachedIcon = getColor().getColor();
                 }
             } else {
-                cachedIcon = Icon.getIcon(icon);
+                cachedIcon = Icon.getIcon(persistence.icon());
             }
         }
 
@@ -299,32 +301,33 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
     }
 
     public void setIcon(String s) {
-        if (!icon.equals(s)) {
-            icon = s;
+        if (!persistence.icon().equals(s)) {
+            persistence.icon(s);
+            cachedIcon = null;
             markDirty();
         }
     }
 
     public boolean isFreeToJoin() {
-        return freeToJoin;
+        return persistence.freeToJoin();
     }
 
     public void setFreeToJoin(boolean b) {
-        if (freeToJoin != b) {
-            freeToJoin = b;
+        if (persistence.freeToJoin() != b) {
+            persistence.freeToJoin(b);
             markDirty();
         }
     }
 
     public EnumTeamStatus getFakePlayerStatus(ForgePlayer player) {
-        return fakePlayerStatus;
+        return persistence.fakePlayerStatus();
     }
 
     public EnumTeamStatus getHighestStatus(@Nullable ForgePlayer player) {
         if (player == null) {
             return EnumTeamStatus.NONE;
         } else if (player.isFake()) {
-            return fakePlayerStatus;
+            return persistence.fakePlayerStatus();
         } else if (isOwner(player)) {
             return EnumTeamStatus.OWNER;
         } else if (isModerator(player)) {
@@ -346,12 +349,12 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
         if (player == null || !isValid()) {
             return EnumTeamStatus.NONE;
         } else if (player.isFake()) {
-            return fakePlayerStatus;
+            return persistence.fakePlayerStatus();
         } else if (type == TeamType.SERVER && getId().equals("singleplayer")) {
             return EnumTeamStatus.MOD;
         }
 
-        EnumTeamStatus status = players.get(player);
+        EnumTeamStatus status = membership.getStatus(player);
         return status == null ? EnumTeamStatus.NONE : status;
     }
 
@@ -388,7 +391,7 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
                 universe.clearCache();
                 ForgePlayer oldOwner = getOwner();
                 owner = player;
-                players.remove(player);
+                membership.removeStatus(player);
                 new ForgeTeamOwnerChangedEvent(this, oldOwner).post();
 
                 if (oldOwner != null) {
@@ -402,13 +405,13 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
 
             return false;
         } else if (!status.isNone() && status.canBeSet()) {
-            if (players.put(player, status) != status) {
+            if (membership.putStatus(player, status) != status) {
                 universe.clearCache();
                 player.markDirty();
                 markDirty();
                 return true;
             }
-        } else if (players.remove(player) != status) {
+        } else if (membership.removeStatus(player) != status) {
             universe.clearCache();
             player.markDirty();
             markDirty();
@@ -440,9 +443,9 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
         if (isValid() && ((isOwner(player) || isInvited(player)) && !isMember(player))) {
             if (!simulate) {
                 universe.clearCache();
-                player.team = this;
-                players.remove(player);
-                requestingInvite.remove(player);
+                player.setTeam(this);
+                membership.removeStatus(player);
+                membership.removeInviteRequest(player);
 
                 ForgeTeamPlayerJoinedEvent event = new ForgeTeamPlayerJoinedEvent(player);
                 event.post();
@@ -466,7 +469,7 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
             return false;
         } else if (getMembers().size() == 1) {
             universe.clearCache();
-            new ForgeTeamPlayerLeftEvent(player).post();
+            postPlayerLeftEvent(player);
 
             if (type.isPlayer) {
                 delete();
@@ -474,20 +477,25 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
                 setStatus(player, EnumTeamStatus.NONE);
             }
 
-            player.team = universe.getTeam("");
+            player.setTeam(universe.getTeam(""));
             player.markDirty();
             markDirty();
+            return true;
         } else if (isOwner(player)) {
             return false;
         }
 
         universe.clearCache();
-        new ForgeTeamPlayerLeftEvent(player).post();
-        player.team = universe.getTeam("");
+        postPlayerLeftEvent(player);
+        player.setTeam(universe.getTeam(""));
         setStatus(player, EnumTeamStatus.NONE);
         player.markDirty();
         markDirty();
         return true;
+    }
+
+    void postPlayerLeftEvent(ForgePlayer player) {
+        new ForgeTeamPlayerLeftEvent(player).post();
     }
 
     public void delete() {
@@ -502,10 +510,10 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
         if (player == null) {
             return false;
         } else if (player.isFake()) {
-            return fakePlayerStatus.isEqualOrGreaterThan(EnumTeamStatus.MEMBER);
+            return persistence.fakePlayerStatus().isEqualOrGreaterThan(EnumTeamStatus.MEMBER);
         }
 
-        return isValid() && equalsTeam(player.team);
+        return isValid() && equalsTeam(player.getTeam());
     }
 
     public boolean isAlly(@Nullable ForgePlayer player) {
@@ -521,12 +529,12 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
     public boolean setRequestingInvite(@Nullable ForgePlayer player, boolean value) {
         if (player != null && isValid()) {
             if (value) {
-                if (requestingInvite.add(player)) {
+                if (membership.addInviteRequest(player)) {
                     player.markDirty();
                     markDirty();
                     return true;
                 }
-            } else if (requestingInvite.remove(player)) {
+            } else if (membership.removeInviteRequest(player)) {
                 player.markDirty();
                 markDirty();
                 return true;
@@ -541,7 +549,7 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
     public boolean isRequestingInvite(@Nullable ForgePlayer player) {
         return player != null && isValid()
                 && !isMember(player)
-                && requestingInvite.contains(player)
+                && membership.isRequestingInvite(player)
                 && !isEnemy(player);
     }
 
@@ -571,17 +579,17 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
 
             ConfigGroup main = cachedConfig.getGroup(ServerUtilities.MOD_ID);
             main.setDisplayName(new ChatComponentText(ServerUtilities.MOD_NAME));
-            main.addBool("free_to_join", () -> freeToJoin, v -> freeToJoin = v, false);
+            main.addBool("free_to_join", persistence::freeToJoin, persistence::freeToJoin, false);
 
             ConfigGroup display = main.getGroup("display");
-            display.addEnum("color", () -> color, v -> color = v, EnumTeamColor.NAME_MAP);
+            display.addEnum("color", persistence::color, persistence::color, EnumTeamColor.NAME_MAP);
             display.addEnum(
                     "fake_player_status",
-                    () -> fakePlayerStatus,
-                    v -> fakePlayerStatus = v,
+                    persistence::fakePlayerStatus,
+                    persistence::fakePlayerStatus,
                     EnumTeamStatus.NAME_MAP_PERMS);
-            display.addString("title", () -> title, v -> title = v, "");
-            display.addString("desc", () -> desc, v -> desc = v, "");
+            display.addString("title", persistence::title, persistence::title, "");
+            display.addString("desc", persistence::description, persistence::description, "");
         }
 
         return cachedConfig;
@@ -596,7 +604,7 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
     }
 
     public boolean equalsTeam(@Nullable ForgeTeam team) {
-        return team == this || uid == Objects.hashCode(team);
+        return equals(team);
     }
 
     public boolean anyPlayerHasPermission(String permission, EnumTeamStatus status) {
@@ -662,19 +670,20 @@ public class ForgeTeam extends FinalIDObject implements INBTSerializable<NBTTagC
     }
 
     public long getLastActivity() {
-        if (lastActivity == 0) {
+        if (persistence.lastActivity() == 0) {
             long latestActivity = 0;
             for (ForgePlayer player : getMembers()) {
                 latestActivity = Math.max(player.getLastTimeSeen(), latestActivity);
             }
-            lastActivity = System.currentTimeMillis() - Ticks.get(universe.ticks.ticks() - latestActivity).millis();
+            persistence.lastActivity(
+                    System.currentTimeMillis() - Ticks.get(universe.ticks.ticks() - latestActivity).millis());
             markDirty();
         }
-        return lastActivity;
+        return persistence.lastActivity();
     }
 
     public void refreshActivity() {
-        lastActivity = System.currentTimeMillis();
+        persistence.lastActivity(System.currentTimeMillis());
         markDirty();
     }
 

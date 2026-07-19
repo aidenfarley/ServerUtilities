@@ -26,16 +26,16 @@ public class CmdSettings extends CmdEditConfigBase {
         if (!p.hasTeam()) {
             ServerUtilitiesAPI.sendCloseGuiPacket(player);
             throw ServerUtilities.error(sender, "serverutilities.lang.team.error.no_team");
-        } else if (!p.team.isModerator(p)) {
+        } else if (!p.getTeam().isModerator(p)) {
             ServerUtilitiesAPI.sendCloseGuiPacket(player);
             throw new CommandException("commands.generic.permission");
         }
 
-        return p.team.getSettings();
+        return p.getTeam().getSettings();
     }
 
     @Override
     public IConfigCallback getCallback(ICommandSender sender) throws CommandException {
-        return CommandUtils.getForgePlayer(sender).team;
+        return CommandUtils.getForgePlayer(sender).getTeam();
     }
 }

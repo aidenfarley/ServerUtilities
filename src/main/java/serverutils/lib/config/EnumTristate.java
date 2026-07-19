@@ -10,7 +10,7 @@ public enum EnumTristate implements IStringSerializable {
 
     @Override
     public String getName() {
-        return name().toLowerCase();
+        return name().toLowerCase(java.util.Locale.ROOT);
     }
 
     public boolean isTrue() {

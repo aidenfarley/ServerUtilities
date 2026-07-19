@@ -25,7 +25,7 @@ public class CmdKick extends CmdBase {
 
         if (!p.hasTeam()) {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.error.no_team");
-        } else if (!p.team.isModerator(p)) {
+        } else if (!p.getTeam().isModerator(p)) {
             throw new CommandException("commands.generic.permission");
         }
 
@@ -33,10 +33,10 @@ public class CmdKick extends CmdBase {
 
         ForgePlayer p1 = CommandUtils.getForgePlayer(sender, args[0]);
 
-        if (!p.team.isMember(p1)) {
+        if (!p.getTeam().isMember(p1)) {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.error.not_member", p1.getDisplayName());
         } else if (!p1.equalsPlayer(p)) {
-            p.team.removeMember(p1);
+            p.getTeam().removeMember(p1);
         } else {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.error.must_transfer_ownership");
         }

@@ -63,13 +63,13 @@ public class CmdVanish extends CmdTreeBase {
 
             if (toVanish) {
                 tag.setBoolean("vanish", true);
-                universe.vanishedPlayers.add(forgePlayer);
+                universe.setVanished(forgePlayer, true);
                 player.capabilities.disableDamage = true;
                 player.addChatMessage(new ChatComponentTranslation("commands.vanish.on"));
                 updateVanishStatus(player, true);
             } else {
                 tag.removeTag("vanish");
-                universe.vanishedPlayers.remove(forgePlayer);
+                universe.setVanished(forgePlayer, false);
                 player.capabilities.disableDamage = false;
                 player.addChatMessage(new ChatComponentTranslation("commands.vanish.off"));
                 updateVanishStatus(player, false);
@@ -114,8 +114,9 @@ public class CmdVanish extends CmdTreeBase {
                 state = data.toggleState(type);
             }
 
-            String stateStr = " " + StatCollector
-                    .translateToLocal("addServer.resourcePack." + (state ? "enabled" : "disabled")).toLowerCase();
+            String stateStr = " "
+                    + StatCollector.translateToLocal("addServer.resourcePack." + (state ? "enabled" : "disabled"))
+                            .toLowerCase(java.util.Locale.ROOT);
             player.addChatMessage(
                     new ChatComponentText(
                             StatCollector.translateToLocal("commands.vanish." + getCommandName()) + stateStr));

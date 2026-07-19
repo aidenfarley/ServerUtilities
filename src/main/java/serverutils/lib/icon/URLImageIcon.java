@@ -58,7 +58,7 @@ public class URLImageIcon extends ImageIcon {
                     try {
                         file = new File(uri.getPath());
                     } catch (Exception ex) {
-                        ex.printStackTrace();
+                        serverutils.ServerUtilities.LOGGER.warn("Failed to resolve icon URI " + uri, ex);
                     }
                 }
 

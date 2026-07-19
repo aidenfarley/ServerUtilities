@@ -52,7 +52,7 @@ public abstract class Task {
     public void queueNotifications(Universe universe) {
         List<NotifyTask> notifications = getNotifications();
         if (notifications == null || notifications.isEmpty()) return;
-        getNotifications().forEach(universe::scheduleTask);
+        notifications.forEach(universe::scheduleTask);
     }
 
     protected List<NotifyTask> getNotifications() {

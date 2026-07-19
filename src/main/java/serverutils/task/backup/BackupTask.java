@@ -5,6 +5,8 @@ import static serverutils.ServerUtilitiesNotifications.BACKUP;
 import static serverutils.lib.util.FileUtils.SizeUnit;
 
 import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -23,8 +25,6 @@ import net.minecraft.world.WorldServer;
 import net.minecraft.world.storage.ThreadedFileIOBase;
 import net.minecraftforge.common.DimensionManager;
 
-import it.unimi.dsi.fastutil.ints.Int2BooleanArrayMap;
-import it.unimi.dsi.fastutil.ints.Int2BooleanMap;
 import serverutils.ServerUtilities;
 import serverutils.ServerUtilitiesConfig;
 import serverutils.data.ClaimedChunks;
@@ -42,13 +42,30 @@ public class BackupTask extends Task {
     public static final Pattern BACKUP_NAME_PATTERN = Pattern.compile("\\d{4}-\\d{2}-\\d{2}-\\d{2}-\\d{2}-\\d{2}(.*)");
     public static final File BACKUP_TEMP_FOLDER = new File("serverutilities/temp/");
     public static final File BACKUP_FOLDER;
-    private static final Int2BooleanMap dimSaveStates = new Int2BooleanArrayMap();
-    public static ThreadBackup thread;
+    private static final BackupLifecycle LIFECYCLE = new BackupLifecycle();
+    private static volatile BackupExecution activeExecution;
+    public static volatile ThreadBackup thread;
     public static boolean hadPlayer = false;
     private ICommandSender sender;
     private String customName = "";
     private boolean post = false;
     private boolean forceOnlyClaimed = false;
+    private BackupExecution cleanupExecution;
+
+    private static final class BackupExecution {
+
+        private final BackupLifecycle.Run run;
+        private final BackupSaveStateSnapshot saveStates;
+        @Nullable
+        private final ThreadBackup worker;
+
+        private BackupExecution(BackupLifecycle.Run run, BackupSaveStateSnapshot saveStates,
+                @Nullable ThreadBackup worker) {
+            this.run = run;
+            this.saveStates = saveStates;
+            this.worker = worker;
+        }
+    }
 
     static {
         BACKUP_FOLDER = backups.backup_folder_path.isEmpty() ? new File("/backups/")
@@ -75,6 +92,15 @@ public class BackupTask extends Task {
     public BackupTask(boolean postCleanup) {
         super(0);
         this.post = postCleanup;
+        if (postCleanup) {
+            this.cleanupExecution = activeExecution;
+        }
+    }
+
+    private BackupTask(BackupExecution execution) {
+        super(0);
+        post = true;
+        cleanupExecution = execution;
     }
 
     @Override
@@ -85,10 +111,11 @@ public class BackupTask extends Task {
     @Override
     public void execute(Universe universe) {
         if (post) {
-            postBackup(universe);
+            if (cleanupExecution != null) {
+                postBackup(universe, cleanupExecution);
+            }
             return;
         }
-        if (thread != null) return;
         boolean auto = sender == null;
 
         if (auto && !backups.enable_backups) return;
@@ -99,17 +126,20 @@ public class BackupTask extends Task {
             hadPlayer = false;
         }
 
-        dimSaveStates.clear();
+        BackupLifecycle.Run run = LIFECYCLE.tryBegin();
+        if (run == null) return;
 
-        // Must run before saveAllChunks so level.dat is written with the current host inventory, otherwise
-        // the single-player host's inventory in the backup is stale and items can dupe/vanish on restore.
-        server.getConfigurationManager().saveAllPlayerData();
+        List<BackupSaveStateSnapshot.WorldState> saveStates = new ArrayList<>();
 
         try {
+            // Must run before saveAllChunks so level.dat is written with the current host inventory, otherwise
+            // the single-player host's inventory in the backup is stale and items can dupe/vanish on restore.
+            server.getConfigurationManager().saveAllPlayerData();
+
             for (int i = 0; i < server.worldServers.length; ++i) {
                 WorldServer world = server.worldServers[i];
                 if (world != null) {
-                    dimSaveStates.put(i, world.levelSaving);
+                    saveStates.add(new BackupSaveStateSnapshot.WorldState(i, world.levelSaving));
                     world.saveAllChunks(true, null);
                     world.levelSaving = true;
                 }
@@ -120,7 +150,9 @@ public class BackupTask extends Task {
                     null,
                     new ChatComponentText(
                             EnumChatFormatting.RED + "An error occurred while preparing backup. " + ex.getMessage()));
-            ServerUtilities.LOGGER.info("An error occurred while preparing backup, Aborting!", ex);
+            ServerUtilities.LOGGER.error("An error occurred while preparing backup, aborting", ex);
+            restoreSaveStates(server, new BackupSaveStateSnapshot(saveStates));
+            abandonRun(run);
             return;
         }
 
@@ -130,27 +162,111 @@ public class BackupTask extends Task {
         } catch (InterruptedException ex) {
             ServerUtilities.LOGGER.warn("Interrupted while flushing pending world writes before backup", ex);
             Thread.currentThread().interrupt();
+            restoreSaveStates(server, new BackupSaveStateSnapshot(saveStates));
+            abandonRun(run);
+            return;
         }
 
-        if (!backups.silent_backup) {
-            BACKUP.sendAll(StringUtils.color("cmd.backup_start", EnumChatFormatting.LIGHT_PURPLE));
+        BackupSaveStateSnapshot saveStateSnapshot = new BackupSaveStateSnapshot(saveStates);
+        ICompress compressor = null;
+        boolean backupStarted = false;
+        BackupExecution execution = null;
+        try {
+            if (!backups.silent_backup) {
+                BACKUP.sendAll(StringUtils.color("cmd.backup_start", EnumChatFormatting.LIGHT_PURPLE));
+            }
+
+            Set<ChunkDimPos> backupChunks = new HashSet<>();
+            boolean onlyClaimedChunks = BackupScope
+                    .select(forceOnlyClaimed, backups.only_backup_claimed_chunks, ClaimedChunks.isActive())
+                    .isClaimedChunksOnly();
+            if (onlyClaimedChunks) {
+                backupChunks.addAll(ClaimedChunks.instance.getAllClaimedPositions());
+                // noinspection ResultOfMethodCallIgnored
+                BACKUP_TEMP_FOLDER.mkdirs();
+            }
+
+            File worldDir = DimensionManager.getCurrentSaveRootDirectory();
+            compressor = ICompress.createCompressor();
+            if (backups.use_separate_thread) {
+                ThreadBackup backupThread = new ThreadBackup(
+                        compressor,
+                        worldDir,
+                        customName,
+                        backupChunks,
+                        onlyClaimedChunks);
+                execution = new BackupExecution(run, saveStateSnapshot, backupThread);
+                publishExecution(execution);
+                universe.scheduleTask(new BackupTask(execution));
+                backupThread.start();
+                compressor = null; // The worker owns and closes it.
+            } else {
+                execution = new BackupExecution(run, saveStateSnapshot, null);
+                publishExecution(execution);
+                ThreadBackup.doBackup(compressor, worldDir, customName, backupChunks, onlyClaimedChunks);
+                compressor = null; // doBackup closes it.
+                universe.scheduleTask(new BackupTask(execution));
+            }
+            backupStarted = true;
+        } catch (Exception ex) {
+            ServerUtilities.LOGGER.error("An error occurred while starting the backup", ex);
+            ServerUtils.notifyChat(
+                    server,
+                    null,
+                    new ChatComponentText(
+                            EnumChatFormatting.RED + "An error occurred while starting backup. " + ex.getMessage()));
+        } finally {
+            if (compressor != null) {
+                try {
+                    compressor.close();
+                } catch (Exception closeError) {
+                    ServerUtilities.LOGGER.warn("Failed to close an unused backup compressor", closeError);
+                }
+            }
+
+            if (!backupStarted) {
+                restoreSaveStates(server, saveStateSnapshot);
+                abandonRun(run);
+            }
         }
-        Set<ChunkDimPos> backupChunks = new HashSet<>();
-        if ((this.forceOnlyClaimed || backups.only_backup_claimed_chunks) && ClaimedChunks.isActive()) {
-            backupChunks.addAll(ClaimedChunks.instance.getAllClaimedPositions());
-            // noinspection ResultOfMethodCallIgnored
-            BACKUP_TEMP_FOLDER.mkdirs();
+    }
+
+    public static boolean isBackupInProgress() {
+        return LIFECYCLE.isInProgress();
+    }
+
+    public static boolean cancelRunningBackup() {
+        ThreadBackup currentWorker;
+        synchronized (LIFECYCLE) {
+            currentWorker = thread;
+            if (currentWorker == null || currentWorker.isDone) {
+                return false;
+            }
         }
 
-        File worldDir = DimensionManager.getCurrentSaveRootDirectory();
-        ICompress compressor = ICompress.createCompressor();
-        if (backups.use_separate_thread) {
-            thread = new ThreadBackup(compressor, worldDir, customName, backupChunks);
-            thread.start();
-        } else {
-            ThreadBackup.doBackup(compressor, worldDir, customName, backupChunks);
+        currentWorker.interrupt();
+        return true;
+    }
+
+    private static void publishExecution(BackupExecution execution) throws IOException {
+        synchronized (LIFECYCLE) {
+            if (!LIFECYCLE.isCurrent(execution.run)) {
+                throw new IOException("Backup execution lost ownership before it started");
+            }
+            activeExecution = execution;
+            thread = execution.worker;
         }
-        universe.scheduleTask(new BackupTask(true));
+    }
+
+    private static void abandonRun(BackupLifecycle.Run run) {
+        synchronized (LIFECYCLE) {
+            if (!LIFECYCLE.isCurrent(run)) {
+                return;
+            }
+            thread = null;
+            activeExecution = null;
+            LIFECYCLE.complete(run);
+        }
     }
 
     public static void clearOldBackups() {
@@ -198,33 +314,38 @@ public class BackupTask extends Task {
         return !server.getConfigurationManager().playerEntityList.isEmpty();
     }
 
-    private void postBackup(Universe universe) {
-        if (thread != null && !thread.isDone) {
+    private void postBackup(Universe universe, BackupExecution execution) {
+        if (!LIFECYCLE.isCurrent(execution.run)) {
+            return;
+        }
+
+        if (execution.worker != null && !execution.worker.isDone) {
             setNextTime(System.currentTimeMillis() + Ticks.SECOND.millis());
             universe.scheduleTask(this);
             return;
         }
 
-        clearOldBackups();
-        FileUtils.delete(BACKUP_TEMP_FOLDER);
-
-        thread = null;
         try {
-            MinecraftServer server = ServerUtils.getServer();
+            clearOldBackups();
+            FileUtils.delete(BACKUP_TEMP_FOLDER);
+        } finally {
+            restoreSaveStates(universe.server, execution.saveStates);
+            abandonRun(execution.run);
+        }
+    }
 
-            for (int i = 0; i < server.worldServers.length; ++i) {
-                WorldServer world = server.worldServers[i];
-                if (world != null) {
-                    if (dimSaveStates.containsKey(i)) {
-                        world.levelSaving = dimSaveStates.get(i);
-                    } else {
-                        world.levelSaving = false;
+    private static void restoreSaveStates(MinecraftServer server, BackupSaveStateSnapshot saveStates) {
+        try {
+            for (BackupSaveStateSnapshot.WorldState saveState : saveStates.worldStates()) {
+                if (saveState.worldIndex >= 0 && saveState.worldIndex < server.worldServers.length) {
+                    WorldServer world = server.worldServers[saveState.worldIndex];
+                    if (world != null) {
+                        world.levelSaving = saveState.levelSaving;
                     }
-
                 }
             }
         } catch (Exception ex) {
-            ServerUtilities.LOGGER.info("An error occurred while turning on auto-save.", ex);
+            ServerUtilities.LOGGER.error("An error occurred while restoring world auto-save state", ex);
         }
     }
 }

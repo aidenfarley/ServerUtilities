@@ -49,7 +49,9 @@ public class CmdInfo extends CmdBase {
                         sender,
                         "commands.team.info.uid",
                         StringUtils.color(
-                                new ChatComponentText(team.getUID() + " / " + String.format("%04x", team.getUID())),
+                                new ChatComponentText(
+                                        team.getUID() + " / "
+                                                + String.format(java.util.Locale.ROOT, "%04x", team.getUID())),
                                 EnumChatFormatting.BLUE)));
         sender.addChatMessage(
                 ServerUtilities.lang(

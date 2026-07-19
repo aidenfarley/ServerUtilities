@@ -9,8 +9,10 @@ public class Aurora {
     public static void start(MinecraftServer s) {
         if (AuroraConfig.general.enable) {
             if (server == null) {
-                server = new AuroraServer(s, AuroraConfig.general.port);
-                server.start();
+                AuroraServer candidate = new AuroraServer(s, AuroraConfig.general.port);
+                if (candidate.start()) {
+                    server = candidate;
+                }
             }
         }
     }

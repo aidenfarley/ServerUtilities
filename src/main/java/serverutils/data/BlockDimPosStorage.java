@@ -59,7 +59,7 @@ public final class BlockDimPosStorage implements INBTSerializable<NBTTagCompound
         NBTTagCompound nbt = new NBTTagCompound();
 
         for (Map.Entry<String, BlockDimPos> entry : map.entrySet()) {
-            nbt.setIntArray(entry.getKey().toLowerCase(), entry.getValue().toIntArray());
+            nbt.setIntArray(entry.getKey().toLowerCase(java.util.Locale.ROOT), entry.getValue().toIntArray());
         }
 
         return nbt;
@@ -74,7 +74,7 @@ public final class BlockDimPosStorage implements INBTSerializable<NBTTagCompound
             BlockDimPos pos = BlockDimPos.fromIntArray(nbt.getIntArray(name));
 
             if (pos != null) {
-                map.put(name.toLowerCase(), pos);
+                map.put(name.toLowerCase(java.util.Locale.ROOT), pos);
             }
         }
 

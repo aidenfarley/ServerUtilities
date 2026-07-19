@@ -73,7 +73,7 @@ public abstract class Panel extends Widget {
         } catch (MismatchingParentPanelException ex) {
             ServerUtilities.LOGGER.error(ex.getMessage());
         } catch (Exception ex) {
-            ex.printStackTrace();
+            ServerUtilities.LOGGER.error("Failed to add a widget to the panel", ex);
         }
 
         // alignWidgets();

@@ -384,12 +384,14 @@ public class ServerUtilitiesPermissions {
 
     public static String formatId(@Nullable Block item) {
         return (item == null || GameData.getBlockRegistry().getNameForObject(item) == null) ? "minecraft.air"
-                : GameData.getBlockRegistry().getNameForObject(item).toLowerCase().replace(':', '.');
+                : GameData.getBlockRegistry().getNameForObject(item).toLowerCase(java.util.Locale.ROOT)
+                        .replace(':', '.');
     }
 
     public static String formatId(@Nullable Item item) {
         return (item == null || GameData.getItemRegistry().getNameForObject(item) == null) ? "minecraft.air"
-                : GameData.getItemRegistry().getNameForObject(item).toLowerCase().replace(':', '.');
+                : GameData.getItemRegistry().getNameForObject(item).toLowerCase(java.util.Locale.ROOT)
+                        .replace(':', '.');
     }
 
     public static boolean hasBlockEditingPermission(EntityPlayer player, Block block) {

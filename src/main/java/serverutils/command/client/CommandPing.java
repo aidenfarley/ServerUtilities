@@ -88,7 +88,7 @@ public class CommandPing extends CmdBase {
                             new C00Handshake(5, address.getIP(), address.getPort(), EnumConnectionState.STATUS));
                     networkManager.scheduleOutboundPacket(new C00PacketServerQuery());
                 } catch (UnknownHostException e) {
-                    e.printStackTrace();
+                    ServerUtilities.LOGGER.warn("Unknown host while pinging " + address.getIP(), e);
                     sender.addChatMessage(ServerUtilities.lang(sender, "commands.ping.unknown"));
                 }
             });

@@ -45,7 +45,7 @@ public class CmdWarp extends CmdBase {
     public void processCommand(ICommandSender sender, String[] args) throws CommandException {
         checkArgs(sender, args, 1);
 
-        args[0] = args[0].toLowerCase();
+        args[0] = args[0].toLowerCase(java.util.Locale.ROOT);
 
         if (args[0].equals("list")) {
             Collection<String> list = ServerUtilitiesUniverseData.WARPS.list();

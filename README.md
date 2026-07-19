@@ -10,6 +10,11 @@ Utilizes a permission system to handle whether a player can use certain commands
 * [GTNHLib](https://www.curseforge.com/minecraft/mc-mods/gtnhlib)
 * Optionally [Navigator](https://github.com/GTNewHorizons/Navigator) which enables claims and chunkload integration for JourneyMap or Xaeros World & Minimap
 
+## Developer documentation
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for lifecycle, persistence, threading, and API boundaries, and
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup, compatibility rules, and verification commands.
+
 ## Quick Install
 
 Download the latest JAR from [releases](https://github.com/GTNewHorizons/ServerUtilities/releases) - you want the one named ServerUtilities-number.jar, not the `dev` or `sources`. Place it in the `/mods` folder on your server AND client (if single player, on client only).

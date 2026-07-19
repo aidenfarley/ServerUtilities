@@ -74,7 +74,7 @@ public class GuiViewCrash extends GuiBase {
                             .addChatMessage(new ChatComponentTranslation("serverutilities.lang.uploaded_crash", link));
                 }
             } catch (Exception ex) {
-                ex.printStackTrace();
+                serverutils.ServerUtilities.LOGGER.error("Failed to upload the crash report", ex);
             }
         }
     }

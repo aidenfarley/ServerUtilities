@@ -6,11 +6,13 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -21,7 +23,6 @@ import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.IChatComponent;
 
 import serverutils.ServerUtilities;
-import serverutils.lib.io.Bits;
 
 public class StringUtils {
 
@@ -44,14 +45,19 @@ public class StringUtils {
     public static final Comparator<Object> ID_COMPARATOR = (o1, o2) -> getID(o1, FLAG_ID_FIX)
             .compareToIgnoreCase(getID(o2, FLAG_ID_FIX));
 
+    @Deprecated
     public static final Map<String, String> TEMP_MAP = new HashMap<>();
-    public static final DecimalFormat DOUBLE_FORMATTER_00 = new DecimalFormat("#0.00");
-    public static final DecimalFormat DOUBLE_FORMATTER_0 = new DecimalFormat("#0.0");
+    @Deprecated
+    public static final DecimalFormat DOUBLE_FORMATTER_00 = new DecimalFormat(
+            "#0.00",
+            DecimalFormatSymbols.getInstance(Locale.ROOT));
+    @Deprecated
+    public static final DecimalFormat DOUBLE_FORMATTER_0 = new DecimalFormat(
+            "#0.0",
+            DecimalFormatSymbols.getInstance(Locale.ROOT));
+    @Deprecated
     public final static int[] INT_SIZE_TABLE = { 9, 99, 999, 9999, 99999, 999999, 9999999, 99999999, 999999999,
             Integer.MAX_VALUE };
-
-    private static final Pattern NOT_SNAKE_CASE_PATTERN = Pattern.compile("[^a-z0-9_]");
-    private static final Pattern REPEATING_UNDERSCORE_PATTERN = Pattern.compile("_{2,}");
     private static final Pattern FORMATTING_CODE_PATTERN = Pattern.compile("(?i)[\\&\u00a7]([0-9A-FK-ORXGQZVU])");
 
     static {
@@ -68,10 +74,7 @@ public class StringUtils {
     }
 
     public static String toSnakeCase(String string) {
-        return string.isEmpty() ? string
-                : REPEATING_UNDERSCORE_PATTERN
-                        .matcher(NOT_SNAKE_CASE_PATTERN.matcher(unformatted(string).toLowerCase()).replaceAll("_"))
-                        .replaceAll("_");
+        return IdentifierUtils.toSnakeCase(string);
     }
 
     public static String emptyIfNull(@Nullable Object o) {
@@ -91,53 +94,7 @@ public class StringUtils {
     }
 
     public static String getID(Object o, int flags) {
-        String id = getRawID(o);
-
-        if (flags == 0) {
-            return id;
-        }
-
-        boolean fix = Bits.getFlag(flags, FLAG_ID_FIX);
-
-        if (!fix && id.isEmpty() && !Bits.getFlag(flags, FLAG_ID_ALLOW_EMPTY)) {
-            throw new NullPointerException("ID can't be empty!");
-        }
-
-        if (Bits.getFlag(flags, FLAG_ID_ONLY_LOWERCASE)) {
-            if (fix) {
-                id = id.toLowerCase();
-            } else if (!id.equals(id.toLowerCase())) {
-                throw new IllegalArgumentException("ID can't contain uppercase characters!");
-            }
-        }
-
-        if (Bits.getFlag(flags, FLAG_ID_ONLY_UNDERLINE)) {
-            if (fix) {
-                id = id.toLowerCase();
-            } else if (!id.equals(id.toLowerCase())) {
-                throw new IllegalArgumentException("ID can't contain uppercase characters!");
-            }
-        }
-
-        if (Bits.getFlag(flags, FLAG_ID_ONLY_UNDERLINE)) {
-            boolean allowPeriod = Bits.getFlag(flags, 16);
-
-            char[] chars = id.toCharArray();
-
-            for (int i = 0; i < chars.length; i++) {
-                if (!(chars[i] == '.' && allowPeriod || isTextChar(chars[i], true))) {
-                    if (fix) {
-                        chars[i] = '_';
-                    } else {
-                        throw new IllegalArgumentException("ID contains invalid character: '" + chars[i] + "'!");
-                    }
-                }
-            }
-
-            id = new String(chars);
-        }
-
-        return id;
+        return IdentifierUtils.normalize(o, flags);
     }
 
     public static String[] shiftArray(@Nullable String[] s) {
@@ -310,13 +267,21 @@ public class StringUtils {
     }
 
     public static String formatDouble0(double value) {
-        String s = DOUBLE_FORMATTER_0.format(value);
-        return s.endsWith(".00") ? s.substring(0, s.length() - 2) : s;
+        String formatted = formatWithLegacyFormatter(DOUBLE_FORMATTER_0, value);
+        return formatted.endsWith(".0") ? formatted.substring(0, formatted.length() - 2) : formatted;
     }
 
     public static String formatDouble00(double value) {
-        String s = DOUBLE_FORMATTER_00.format(value);
-        return s.endsWith(".00") ? s.substring(0, s.length() - 3) : s;
+        String formatted = formatWithLegacyFormatter(DOUBLE_FORMATTER_00, value);
+        return formatted.endsWith(".00") ? formatted.substring(0, formatted.length() - 3) : formatted;
+    }
+
+    private static String formatWithLegacyFormatter(DecimalFormat formatter, double value) {
+        DecimalFormat copy;
+        synchronized (formatter) {
+            copy = (DecimalFormat) formatter.clone();
+        }
+        return copy.format(value);
     }
 
     public static String formatDouble(double value, boolean fancy) {
@@ -410,52 +375,12 @@ public class StringUtils {
     }
 
     public static String fromUUID(@Nullable UUID id) {
-        if (id != null) {
-            long msb = id.getMostSignificantBits();
-            long lsb = id.getLeastSignificantBits();
-            StringBuilder sb = new StringBuilder(32);
-            digitsUUID(sb, msb >> 32, 8);
-            digitsUUID(sb, msb >> 16, 4);
-            digitsUUID(sb, msb, 4);
-            digitsUUID(sb, lsb >> 48, 4);
-            digitsUUID(sb, lsb, 12);
-            return sb.toString();
-        }
-
-        return "";
-    }
-
-    private static void digitsUUID(StringBuilder sb, long val, int digits) {
-        long hi = 1L << (digits * 4);
-        String s = Long.toHexString(hi | (val & (hi - 1)));
-        sb.append(s, 1, s.length());
+        return UuidUtils.toCompactString(id);
     }
 
     @Nullable
     public static UUID fromString(@Nullable String s) {
-        if (s == null || !(s.length() == 32 || s.length() == 36)) {
-            return null;
-        }
-
-        try {
-            if (s.indexOf('-') != -1) {
-                return UUID.fromString(s);
-            }
-
-            int l = s.length();
-            StringBuilder sb = new StringBuilder(36);
-            for (int i = 0; i < l; i++) {
-                sb.append(s.charAt(i));
-                if (i == 7 || i == 11 || i == 15 || i == 19) {
-                    sb.append('-');
-                }
-            }
-
-            return UUID.fromString(sb.toString());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return null;
+        return UuidUtils.parse(s);
     }
 
     public static Map<String, String> parse(Map<String, String> map, String s) {

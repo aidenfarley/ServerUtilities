@@ -34,7 +34,7 @@ public class CmdGet extends CmdBase {
         IChatComponent component = new ChatComponentText("");
         component.appendSibling(player.getDisplayName());
         component.appendText(": ");
-        component.appendSibling(player.team.getCommandTitle());
+        component.appendSibling(player.getTeam().getCommandTitle());
         sender.addChatMessage(component);
     }
 }

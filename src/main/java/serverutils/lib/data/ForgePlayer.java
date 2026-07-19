@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.Objects;
 import java.util.UUID;
 
 import javax.annotation.Nullable;
@@ -53,17 +54,23 @@ public class ForgePlayer implements INBTSerializable<NBTTagCompound>, Comparable
 
     private static FakePlayer playerForStats;
 
+    private final Universe universe;
     public GameProfile profile;
     private final NBTDataStorage dataStorage;
+    /** @deprecated Use {@link #getTeam()} and {@link #setTeam(ForgeTeam)}. */
+    @Deprecated
     public ForgeTeam team;
     private boolean hideTeamNotification;
     public NBTTagCompound cachedPlayerNBT;
     private ConfigGroup cachedConfig;
     public long lastTimeSeen;
+    /** @deprecated Use {@link #isDirty()}, {@link #markDirty()}, and {@link #markSaved()}. */
+    @Deprecated
     public boolean needsSaving;
     public EntityPlayerMP tempPlayer;
 
     public ForgePlayer(Universe u, GameProfile p) {
+        universe = u;
         profile = p;
         dataStorage = new NBTDataStorage();
         team = u.getTeam("");
@@ -100,7 +107,59 @@ public class ForgePlayer implements INBTSerializable<NBTTagCompound>, Comparable
 
     public void markDirty() {
         needsSaving = true;
-        team.universe.checkSaving = true;
+        universe.markChildDirty();
+    }
+
+    public boolean isDirty() {
+        return needsSaving;
+    }
+
+    public void markSaved() {
+        needsSaving = false;
+    }
+
+    public ForgeTeam getTeam() {
+        return team;
+    }
+
+    public Universe getUniverse() {
+        return universe;
+    }
+
+    public void setTeam(ForgeTeam team) {
+        ForgeTeam nextTeam = requireOwnedTeam(team);
+        if (this.team == nextTeam) {
+            return;
+        }
+
+        ForgeTeam previousTeam = this.team;
+        this.team = nextTeam;
+        clearCache();
+        if (previousTeam != null) {
+            previousTeam.clearCache();
+        }
+        nextTeam.clearCache();
+        universe.clearCache();
+        markDirty();
+
+        if (previousTeam != null && previousTeam.isValid()) {
+            previousTeam.markDirty();
+        }
+        if (nextTeam.isValid()) {
+            nextTeam.markDirty();
+        }
+    }
+
+    void setTeamFromLoad(ForgeTeam team) {
+        this.team = requireOwnedTeam(team);
+    }
+
+    private ForgeTeam requireOwnedTeam(ForgeTeam team) {
+        ForgeTeam ownedTeam = Objects.requireNonNull(team, "team");
+        if (ownedTeam.universe != universe) {
+            throw new IllegalArgumentException("Player and team belong to different universes");
+        }
+        return ownedTeam;
     }
 
     public boolean hasTeam() {
@@ -123,7 +182,9 @@ public class ForgePlayer implements INBTSerializable<NBTTagCompound>, Comparable
         if (isOnline()) {
             try {
                 return getPlayer().getDisplayName();
-            } catch (Exception ignored) {}
+            } catch (RuntimeException ex) {
+                ServerUtilities.LOGGER.debug("Failed to read the online display name for " + getName(), ex);
+            }
         }
 
         return getName();
@@ -134,7 +195,9 @@ public class ForgePlayer implements INBTSerializable<NBTTagCompound>, Comparable
             try {
                 return new ChatComponentText(getDisplayNameString());
 
-            } catch (Exception ignored) {}
+            } catch (RuntimeException ex) {
+                ServerUtilities.LOGGER.debug("Failed to build the online display name for " + getName(), ex);
+            }
         }
 
         return new ChatComponentText(getName());
@@ -185,7 +248,7 @@ public class ForgePlayer implements INBTSerializable<NBTTagCompound>, Comparable
         } else if (level == EnumPrivacyLevel.PRIVATE) {
             return false;
         } else if (level == EnumPrivacyLevel.TEAM) {
-            return owner.team.isAlly(this);
+            return owner.getTeam().isAlly(this);
         }
 
         return false;
@@ -246,7 +309,7 @@ public class ForgePlayer implements INBTSerializable<NBTTagCompound>, Comparable
 
                 sendTeamJoinEvent = true;
             } else {
-                String id = getName().toLowerCase();
+                String id = getName().toLowerCase(java.util.Locale.ROOT);
 
                 if (universe.getTeam(id).isValid()) {
                     id = StringUtils.fromUUID(getId());
@@ -254,7 +317,7 @@ public class ForgePlayer implements INBTSerializable<NBTTagCompound>, Comparable
 
                 if (!universe.getTeam(id).isValid()) {
                     team = new ForgeTeam(universe, universe.generateTeamUID((short) 0), id, TeamType.PLAYER);
-                    team.owner = this;
+                    team.initializeOwner(this);
                     universe.addTeam(team);
                     team.setColor(EnumTeamColor.NAME_MAP.getRandom(universe.world.rand));
                     team.markDirty();
@@ -359,7 +422,7 @@ public class ForgePlayer implements INBTSerializable<NBTTagCompound>, Comparable
                     new File(team.universe.getWorldDirectory(), "playerdata/" + getId() + ".dat"))) {
                 cachedPlayerNBT = CompressedStreamTools.readCompressed(stream);
             } catch (Exception ex) {
-                ex.printStackTrace();
+                ServerUtilities.LOGGER.error("Failed to read player data for " + getId(), ex);
             }
         }
 
@@ -383,7 +446,7 @@ public class ForgePlayer implements INBTSerializable<NBTTagCompound>, Comparable
                     new File(team.universe.getWorldDirectory(), "playerdata/" + getId() + ".dat"))) {
                 CompressedStreamTools.writeCompressed(nbt, stream);
             } catch (Exception ex) {
-                ex.printStackTrace();
+                ServerUtilities.LOGGER.error("Failed to write player data for " + getId(), ex);
             }
         }
 
@@ -421,7 +484,7 @@ public class ForgePlayer implements INBTSerializable<NBTTagCompound>, Comparable
 
     public File getDataFile() {
         File dir = new File(team.universe.dataFolder, "players/");
-        return new File(dir, getName().toLowerCase() + ".dat");
+        return new File(dir, getName().toLowerCase(java.util.Locale.ROOT) + ".dat");
     }
 
     @Override

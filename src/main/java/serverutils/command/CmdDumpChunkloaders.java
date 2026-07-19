@@ -171,7 +171,7 @@ public class CmdDumpChunkloaders extends CmdBase {
 
                         ChunkCoordIntPair headChunk = chunks.get(0);
                         IChatComponent regionDescription = new ChatComponentText(
-                                String.format("  * %s (size: %d)", headChunk, regionSize));
+                                String.format(java.util.Locale.ROOT, "  * %s (size: %d)", headChunk, regionSize));
 
                         int x = headChunk.chunkXPos * 16 + 8;
                         int z = headChunk.chunkZPos * 16 + 8;
@@ -201,7 +201,7 @@ public class CmdDumpChunkloaders extends CmdBase {
 
     @NotNull
     private IChatComponent buildTicketDescription(ForgeChunkManager.Ticket ticket) {
-        IChatComponent title = new ChatComponentText(String.format("#%08x", ticket.hashCode()));
+        IChatComponent title = new ChatComponentText(String.format(java.util.Locale.ROOT, "#%08x", ticket.hashCode()));
         title.getChatStyle().setChatHoverEvent(
                 new HoverEvent(
                         HoverEvent.Action.SHOW_TEXT,

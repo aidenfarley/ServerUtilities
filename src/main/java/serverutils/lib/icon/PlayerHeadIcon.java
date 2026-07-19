@@ -95,7 +95,9 @@ public class PlayerHeadIcon extends ImageIcon {
                                     }
                                 }
                             }
-                        } catch (Exception ignored) {}
+                        } catch (Exception ex) {
+                            serverutils.ServerUtilities.LOGGER.debug("Failed to resolve player skin metadata", ex);
+                        }
 
                         if (imageUrl.isEmpty()) {
                             return;
@@ -106,7 +108,9 @@ public class PlayerHeadIcon extends ImageIcon {
                                     DataReader
                                             .get(new URL(imageUrl), DataReader.PNG, Minecraft.getMinecraft().getProxy())
                                             .image());
-                        } catch (Exception ignored) {}
+                        } catch (Exception ex) {
+                            serverutils.ServerUtilities.LOGGER.debug("Failed to download a player skin", ex);
+                        }
                     }
                 };
 

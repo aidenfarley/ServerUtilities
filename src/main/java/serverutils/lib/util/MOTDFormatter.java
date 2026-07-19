@@ -1,6 +1,6 @@
 package serverutils.lib.util;
 
-import java.text.DecimalFormat;
+import java.util.concurrent.atomic.AtomicLong;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ChatComponentText;
@@ -11,15 +11,10 @@ import serverutils.ServerUtilitiesConfig;
 
 public class MOTDFormatter {
 
-    private static final DecimalFormat TPS_FORMAT = new DecimalFormat("0.0");
-    private static final DecimalFormat MEMORY_FORMAT = new DecimalFormat("0");
-
-    private static long serverStartTime = 0L;
+    private static final AtomicLong SERVER_START_TIME = new AtomicLong();
 
     public static IChatComponent buildMOTD(MinecraftServer server) {
-        if (serverStartTime == 0L) {
-            serverStartTime = System.currentTimeMillis();
-        }
+        SERVER_START_TIME.compareAndSet(0L, System.currentTimeMillis());
 
         if (!ServerUtilitiesConfig.motd.enabled) {
             return new ChatComponentText(server.getMOTD());
@@ -49,13 +44,11 @@ public class MOTDFormatter {
             long freeMemory = runtime.freeMemory() / 1024 / 1024;
             long usedMemory = totalMemory - freeMemory;
 
-            result = result.replace(
-                    "{memory}",
-                    MEMORY_FORMAT.format(usedMemory) + "/" + MEMORY_FORMAT.format(maxMemory) + "MB");
+            result = result.replace("{memory}", Long.toString(usedMemory) + "/" + maxMemory + "MB");
         }
 
         if (result.contains("{uptime}")) {
-            long uptimeMillis = System.currentTimeMillis() - serverStartTime;
+            long uptimeMillis = System.currentTimeMillis() - SERVER_START_TIME.get();
             result = result.replace("{uptime}", formatUptime(uptimeMillis));
         }
 
@@ -77,7 +70,7 @@ public class MOTDFormatter {
             // Cap at 20.0 TPS maximum
             double tps = Math.min(20.0, 1000.0 / avgTickTimeMs);
 
-            return TPS_FORMAT.format(tps);
+            return NumberFormatUtils.formatRoundedOneDecimal(tps);
         } catch (Exception e) {
             // Fallback if calculation fails
             return "N/A";

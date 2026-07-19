@@ -4,9 +4,9 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -16,13 +16,10 @@ import javax.annotation.Nullable;
 
 import net.minecraft.command.ICommandSender;
 import net.minecraft.entity.player.EntityPlayerMP;
-import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.WorldServer;
 import net.minecraftforge.event.world.WorldEvent;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import com.mojang.authlib.GameProfile;
 
 import cpw.mods.fml.common.event.FMLServerAboutToStartEvent;
@@ -32,27 +29,13 @@ import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.PlayerEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
-import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
-import serverutils.ServerUtilities;
 import serverutils.ServerUtilitiesConfig;
-import serverutils.data.BackwardsCompat;
-import serverutils.events.ServerReloadEvent;
-import serverutils.events.player.ForgePlayerLoadedEvent;
-import serverutils.events.player.ForgePlayerSavedEvent;
 import serverutils.events.team.ForgeTeamDeletedEvent;
-import serverutils.events.team.ForgeTeamLoadedEvent;
-import serverutils.events.team.ForgeTeamSavedEvent;
 import serverutils.events.universe.UniverseClearCacheEvent;
 import serverutils.events.universe.UniverseClosedEvent;
-import serverutils.events.universe.UniverseLoadedEvent;
-import serverutils.events.universe.UniverseSavedEvent;
-import serverutils.lib.EnumReloadType;
-import serverutils.lib.EnumTeamColor;
-import serverutils.lib.io.DataReader;
 import serverutils.lib.math.MathUtils;
 import serverutils.lib.math.Ticks;
 import serverutils.lib.util.FileUtils;
-import serverutils.lib.util.NBTUtils;
 import serverutils.lib.util.ServerUtils;
 import serverutils.lib.util.StringUtils;
 import serverutils.ranks.Ranks;
@@ -76,7 +59,19 @@ public class Universe {
         return INSTANCE;
     }
 
+    public static Universe requireLoaded() {
+        if (INSTANCE == null) {
+            throw new IllegalStateException("ServerUtilities Universe is not loaded");
+        }
+
+        return INSTANCE;
+    }
+
     public static @Nullable Universe getNullable() {
+        return INSTANCE;
+    }
+
+    public static @Nullable Universe getIfLoaded() {
         return INSTANCE;
     }
 
@@ -163,23 +158,7 @@ public class Universe {
         if (event.phase == TickEvent.Phase.START) {
             universe.ticks = Ticks.get(event.world.getTotalWorldTime());
         } else if (!event.world.isRemote && event.world.provider.dimensionId == 0) {
-            universe.taskList.addAll(universe.taskQueue);
-            universe.taskQueue.clear();
-
-            Iterator<Task> taskIterator = universe.taskList.iterator();
-
-            while (taskIterator.hasNext()) {
-                Task task = taskIterator.next();
-                if (task.isComplete(universe)) {
-                    task.execute(universe);
-
-                    if (task.isRepeatable()) {
-                        task.setNextTime(System.currentTimeMillis() + task.getInterval());
-                        continue;
-                    }
-                    taskIterator.remove();
-                }
-            }
+            universe.taskScheduler.tick(universe);
 
             if (universe.server.isSinglePlayer()) {
                 boolean cheats = universe.server.getConfigurationManager().commandsAllowedForAll;
@@ -196,18 +175,17 @@ public class Universe {
 
     public final MinecraftServer server;
     public WorldServer world;
+    private final UniverseRepository repository;
+    /** @deprecated Use player registration and lookup methods instead. */
+    @Deprecated
     public final Map<UUID, ForgePlayer> players;
+    /** @deprecated Use {@link #setVanished(ForgePlayer, boolean)} and {@link #getVanishedPlayersView()}. */
+    @Deprecated
     public final Set<ForgePlayer> vanishedPlayers;
-    private final Map<String, ForgeTeam> teams;
-    private final Map<Short, ForgeTeam> teamMap;
-    private final ForgeTeam noneTeam;
-    private UUID uuid;
-    private boolean needsSaving;
-    boolean checkSaving;
     public ForgeTeam fakePlayerTeam;
     public FakeForgePlayer fakePlayer;
-    private final List<Task> taskList;
-    private final List<Task> taskQueue;
+    private final UniversePersistence persistence;
+    private final UniverseTaskScheduler taskScheduler;
     public Ticks ticks;
     private boolean prevCheats = false;
     public File dataFolder;
@@ -218,32 +196,26 @@ public class Universe {
     public Universe(MinecraftServer s) {
         server = s;
         ticks = Ticks.NO_TICKS;
-        players = new HashMap<>();
-        vanishedPlayers = new ObjectOpenHashSet<>();
-        teams = new HashMap<>();
-        teamMap = new HashMap<>();
-        noneTeam = new ForgeTeam(this, (short) 0, "", TeamType.NONE);
-        uuid = null;
-        needsSaving = false;
-        checkSaving = true;
-        taskList = new ArrayList<>();
-        taskQueue = new ArrayList<>();
+        repository = new UniverseRepository();
+        persistence = new UniversePersistence(this);
+        taskScheduler = new UniverseTaskScheduler();
+        players = repository.mutablePlayers();
+        vanishedPlayers = repository.mutableVanishedPlayers();
         gameRulesFlipped = false;
         flippedRulesSaveState = new HashMap<>();
+        repository.initialize(this);
     }
 
     public void markDirty() {
-        needsSaving = true;
-        checkSaving = true;
+        persistence.markDirty();
+    }
+
+    void markChildDirty() {
+        persistence.markChildDirty();
     }
 
     public UUID getUUID() {
-        if (uuid == null) {
-            uuid = UUID.randomUUID();
-            markDirty();
-        }
-
-        return uuid;
+        return persistence.getUuid();
     }
 
     public void scheduleTask(Task task) {
@@ -251,253 +223,15 @@ public class Universe {
     }
 
     public void scheduleTask(Task task, boolean condition) {
-        if (!condition) return;
-        if (task.getNextTime() <= -1) return;
-        task.queueNotifications(this);
-        taskQueue.add(task);
+        taskScheduler.schedule(this, task, condition);
     }
 
     private void load() {
-        dataFolder = new File(getWorldDirectory(), "serverutilities/");
-        latModFolder = new File(getWorldDirectory(), "LatMod");
-        NBTTagCompound universeData = NBTUtils.readNBT(new File(dataFolder, "universe.dat"));
-
-        if (universeData == null) {
-            universeData = new NBTTagCompound();
-        }
-
-        File worldDataJsonFile = new File(getWorldDirectory(), "world_data.json");
-        JsonElement worldData = DataReader.get(worldDataJsonFile).safeJson();
-
-        if (worldData.isJsonObject()) {
-            JsonObject jsonWorldData = worldData.getAsJsonObject();
-
-            if (jsonWorldData.has("world_id")) {
-                universeData.setString("UUID", jsonWorldData.get("world_id").getAsString());
-            }
-
-            worldDataJsonFile.delete();
-        }
-
-        uuid = StringUtils.fromString(universeData.getString("UUID"));
-
-        if (uuid != null && uuid.getLeastSignificantBits() == 0L && uuid.getMostSignificantBits() == 0L) {
-            uuid = null;
-        }
-
-        NBTTagCompound data = universeData.getCompoundTag("Data");
-
-        new UniverseLoadedEvent.Pre(this, data).post();
-
-        Map<UUID, NBTTagCompound> playerNBT = new HashMap<>();
-        Map<String, NBTTagCompound> teamNBT = new HashMap<>();
-
-        try {
-            File[] files = new File(dataFolder, "players").listFiles();
-
-            if (files != null) {
-                for (File file : files) {
-                    if (file.isFile() && file.getName().endsWith(".dat")
-                            && file.getName().indexOf('.') == file.getName().lastIndexOf('.')) {
-                        NBTTagCompound nbt = NBTUtils.readNBT(file);
-
-                        if (nbt != null) {
-                            String uuidString = nbt.getString("UUID");
-
-                            if (uuidString.isEmpty()) {
-                                uuidString = FileUtils.getBaseName(file);
-                                FileUtils.deleteSafe(file);
-                            }
-
-                            UUID uuid = StringUtils.fromString(uuidString);
-
-                            if (uuid != null) {
-                                playerNBT.put(uuid, nbt);
-                                ForgePlayer player = new ForgePlayer(this, uuid, nbt.getString("Name"));
-                                players.put(uuid, player);
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
-
-        try {
-            File[] files = new File(dataFolder, "teams").listFiles();
-
-            if (files != null) {
-                for (File file : files) {
-                    if (file.isFile() && file.getName().endsWith(".dat")
-                            && file.getName().indexOf('.') == file.getName().lastIndexOf('.')) {
-                        NBTTagCompound nbt = NBTUtils.readNBT(file);
-
-                        if (nbt != null) {
-                            String s = nbt.getString("ID");
-
-                            if (s.isEmpty()) {
-                                s = FileUtils.getBaseName(file);
-                            }
-
-                            teamNBT.put(s, nbt);
-                            short uid = nbt.getShort("UID");
-                            ForgeTeam team = new ForgeTeam(
-                                    this,
-                                    generateTeamUID(uid),
-                                    s,
-                                    TeamType.NAME_MAP.get(nbt.getString("Type")));
-                            addTeam(team);
-
-                            if (uid == 0) {
-                                team.markDirty();
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (Exception ex) {
-            ex.printStackTrace();
-        }
-
-        fakePlayerTeam = new ForgeTeam(this, (short) 1, "fakeplayer", TeamType.SERVER_NO_SAVE) {
-
-            @Override
-            public void markDirty() {
-                Universe.this.markDirty();
-            }
-        };
-
-        fakePlayer = new FakeForgePlayer(this);
-        fakePlayer.team = fakePlayerTeam;
-        fakePlayerTeam.setColor(EnumTeamColor.GRAY);
-
-        new UniverseLoadedEvent.CreateServerTeams(this).post();
-
-        for (ForgePlayer player : players.values()) {
-            NBTTagCompound nbt = playerNBT.get(player.getId());
-
-            if (nbt != null && !nbt.hasNoTags()) {
-                player.team = getTeam(nbt.getString("TeamID"));
-                player.deserializeNBT(nbt);
-            }
-
-            new ForgePlayerLoadedEvent(player).post();
-        }
-
-        for (ForgeTeam team : getTeams()) {
-            if (!team.type.save) {
-                continue;
-            }
-
-            NBTTagCompound nbt = teamNBT.get(team.getId());
-
-            if (nbt != null && !nbt.hasNoTags()) {
-                team.deserializeNBT(nbt);
-            }
-
-            new ForgeTeamLoadedEvent(team).post();
-        }
-
-        if (universeData.hasKey("FakePlayer")) {
-            fakePlayer.deserializeNBT(universeData.getCompoundTag("FakePlayer"));
-        }
-
-        if (universeData.hasKey("FakeTeam")) {
-            fakePlayerTeam.deserializeNBT(universeData.getCompoundTag("FakeTeam"));
-        }
-
-        fakePlayerTeam.owner = fakePlayer;
-
-        if (universeData.hasKey("GameRulesState")) {
-            NBTTagCompound gameRulesState = universeData.getCompoundTag("GameRulesState");
-            gameRulesFlipped = gameRulesState.getBoolean("Flipped");
-            NBTTagCompound savedRules = gameRulesState.getCompoundTag("SavedRules");
-            for (String key : NBTUtils.getKeySet(savedRules)) {
-                flippedRulesSaveState.put(key, savedRules.getString(key));
-            }
-        }
-
-        new UniverseLoadedEvent.Post(this, data).post();
-
-        if (shouldLoadLatmod()) {
-            BackwardsCompat.load();
-        }
-
-        new UniverseLoadedEvent.Finished(this).post();
-
-        ServerUtilitiesAPI.reloadServer(this, server, EnumReloadType.CREATED, ServerReloadEvent.ALL);
+        persistence.load();
     }
 
     private void save() {
-        if (!checkSaving) {
-            return;
-        }
-
-        if (needsSaving) {
-            if (ServerUtilitiesConfig.debugging.print_more_info) {
-                ServerUtilities.LOGGER.info("Saving universe data");
-            }
-
-            NBTTagCompound universeData = new NBTTagCompound();
-            NBTTagCompound data = new NBTTagCompound();
-            new UniverseSavedEvent(this, data).post();
-            universeData.setTag("Data", data);
-            universeData.setString("UUID", StringUtils.fromUUID(getUUID()));
-            universeData.setTag("FakePlayer", fakePlayer.serializeNBT());
-            universeData.setTag("FakeTeam", fakePlayerTeam.serializeNBT());
-            NBTTagCompound gameRulesState = new NBTTagCompound();
-            gameRulesState.setBoolean("Flipped", gameRulesFlipped);
-            NBTTagCompound savedRules = new NBTTagCompound();
-            for (Map.Entry<String, String> entry : flippedRulesSaveState.entrySet()) {
-                savedRules.setString(entry.getKey(), entry.getValue());
-            }
-            gameRulesState.setTag("SavedRules", savedRules);
-            universeData.setTag("GameRulesState", gameRulesState);
-            NBTUtils.writeNBTSafe(new File(dataFolder, "universe.dat"), universeData);
-            needsSaving = false;
-        }
-
-        for (ForgePlayer player : players.values()) {
-            if (player.needsSaving) {
-                if (ServerUtilitiesConfig.debugging.print_more_info) {
-                    ServerUtilities.LOGGER.info("Saved player data for " + player.getName());
-                }
-
-                NBTTagCompound nbt = player.serializeNBT();
-                nbt.setString("Name", player.getName());
-                nbt.setString("UUID", StringUtils.fromUUID(player.getId()));
-                nbt.setString("TeamID", player.team.getId());
-                NBTUtils.writeNBTSafe(player.getDataFile(), nbt);
-                new ForgePlayerSavedEvent(player).post();
-                player.needsSaving = false;
-            }
-        }
-
-        for (ForgeTeam team : getTeams()) {
-            if (team.needsSaving) {
-                if (ServerUtilitiesConfig.debugging.print_more_info) {
-                    ServerUtilities.LOGGER.info("Saved team data for {}", team.getId());
-                }
-
-                File file = team.getDataFile("");
-
-                if (team.type.save && team.isValid()) {
-                    NBTTagCompound nbt = team.serializeNBT();
-                    nbt.setString("ID", team.getId());
-                    nbt.setShort("UID", team.getUID());
-                    nbt.setString("Type", team.type.getName());
-                    NBTUtils.writeNBTSafe(file, nbt);
-                    new ForgeTeamSavedEvent(team).post();
-                } else if (file.exists()) {
-                    file.delete();
-                }
-
-                team.needsSaving = false;
-            }
-        }
-
-        checkSaving = false;
+        persistence.save();
     }
 
     public File getWorldDirectory() {
@@ -513,17 +247,17 @@ public class Universe {
 
         if (p == null) {
             p = new ForgePlayer(this, player.getUniqueID(), player.getCommandSenderName());
-            players.put(p.getId(), p);
+            repository.putPlayer(p.getId(), p);
             p.onLoggedIn(player, this, true);
         } else {
             if (!p.getId().equals(player.getUniqueID()) || !p.getName().equals(player.getCommandSenderName())) {
                 File old = p.getDataFile();
-                players.remove(p.getId());
+                repository.removePlayer(p.getId());
                 p.profile = new GameProfile(player.getUniqueID(), player.getCommandSenderName());
-                players.put(p.getId(), p);
+                repository.putPlayer(p.getId(), p);
                 old.renameTo(p.getDataFile());
                 p.markDirty();
-                p.team.markDirty();
+                p.getTeam().markDirty();
                 markDirty();
             }
 
@@ -537,11 +271,31 @@ public class Universe {
     }
 
     public Collection<ForgePlayer> getPlayers() {
-        return players.values();
+        return repository.players();
+    }
+
+    public Collection<ForgePlayer> getPlayersView() {
+        return Collections.unmodifiableCollection(repository.players());
+    }
+
+    public void registerPlayer(ForgePlayer player) {
+        registerPlayer(player.getId(), player);
+    }
+
+    public void registerPlayer(UUID id, ForgePlayer player) {
+        repository.putPlayer(id, player);
     }
 
     public Collection<ForgePlayer> getVanishedPlayers() {
         return vanishedPlayers;
+    }
+
+    public Set<ForgePlayer> getVanishedPlayersView() {
+        return Collections.unmodifiableSet(vanishedPlayers);
+    }
+
+    public boolean setVanished(ForgePlayer player, boolean vanished) {
+        return vanished ? vanishedPlayers.add(player) : vanishedPlayers.remove(player);
     }
 
     @Nullable
@@ -552,38 +306,73 @@ public class Universe {
             return fakePlayer;
         }
 
-        return players.get(id);
+        return repository.getPlayer(id);
     }
 
     @Nullable
     public ForgePlayer getPlayer(CharSequence nameOrId) {
-        String s = nameOrId.toString().toLowerCase();
-
-        if (s.isEmpty()) {
-            return null;
-        }
-
-        UUID id = StringUtils.fromString(s);
-
-        if (id != null) {
-            return getPlayer(id);
-        } else if (s.equals(ServerUtils.FAKE_PLAYER_PROFILE.getName().toLowerCase())) {
+        if (fakePlayer != null && ServerUtils.FAKE_PLAYER_PROFILE.getName().equalsIgnoreCase(nameOrId.toString())) {
             return fakePlayer;
         }
 
-        for (ForgePlayer p : players.values()) {
-            if (p.getName().toLowerCase().equals(s)) {
-                return p;
+        List<ForgePlayer> matches = searchPlayers(nameOrId);
+        return matches.isEmpty() ? null : matches.get(0);
+    }
+
+    @Nullable
+    public ForgePlayer findPlayerExact(CharSequence nameOrId) {
+        String query = nameOrId.toString();
+        UUID id = StringUtils.fromString(query);
+        if (id != null) {
+            return getPlayer(id);
+        }
+
+        List<ForgePlayer> exactMatches = findPlayersByName(query, true);
+        return exactMatches.size() == 1 ? exactMatches.get(0) : null;
+    }
+
+    public List<ForgePlayer> searchPlayers(CharSequence nameOrId) {
+        String query = nameOrId.toString();
+        if (query.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        UUID id = StringUtils.fromString(query);
+        if (id != null) {
+            ForgePlayer player = getPlayer(id);
+            return player == null ? Collections.emptyList() : Collections.singletonList(player);
+        }
+
+        List<ForgePlayer> exactMatches = findPlayersByName(query, true);
+        if (!exactMatches.isEmpty()) {
+            return Collections.unmodifiableList(exactMatches);
+        }
+
+        return Collections.unmodifiableList(findPlayersByName(query, false));
+    }
+
+    private List<ForgePlayer> findPlayersByName(String query, boolean exact) {
+        String normalizedQuery = query.toLowerCase(java.util.Locale.ROOT);
+        List<ForgePlayer> matches = new ArrayList<>();
+        Set<UUID> matchedIds = new HashSet<>();
+        if (exact && fakePlayer != null
+                && ServerUtils.FAKE_PLAYER_PROFILE.getName().equalsIgnoreCase(normalizedQuery)) {
+            matches.add(fakePlayer);
+            matchedIds.add(fakePlayer.getId());
+        }
+
+        for (ForgePlayer player : repository.players()) {
+            String normalizedName = player.getName().toLowerCase(java.util.Locale.ROOT);
+            if ((exact ? normalizedName.equals(normalizedQuery) : normalizedName.contains(normalizedQuery))
+                    && matchedIds.add(player.getId())) {
+                matches.add(player);
             }
         }
 
-        for (ForgePlayer p : players.values()) {
-            if (p.getName().toLowerCase().contains(s)) {
-                return p;
-            }
-        }
-
-        return null;
+        matches.sort(
+                Comparator.comparing((ForgePlayer player) -> player.getName().toLowerCase(java.util.Locale.ROOT))
+                        .thenComparing(ForgePlayer::getId));
+        return matches;
     }
 
     public ForgePlayer getPlayer(@Nullable ICommandSender sender) {
@@ -624,7 +413,7 @@ public class Universe {
         if (player == null
                 && ServerUtilitiesConfig.general.merge_offline_mode_players.get(!server.isDedicatedServer())) {
             String profileName = profile.getName();
-            for (ForgePlayer p : players.values()) {
+            for (ForgePlayer p : repository.players()) {
                 if (p.getName().equalsIgnoreCase(profileName)) {
                     player = p;
                     break;
@@ -632,7 +421,7 @@ public class Universe {
             }
 
             if (player != null) {
-                players.put(profile.getId(), player);
+                repository.putPlayer(profile.getId(), player);
                 player.markDirty();
             }
         }
@@ -641,12 +430,12 @@ public class Universe {
     }
 
     public Collection<ForgeTeam> getTeams() {
-        return teams.values();
+        return repository.teamsView();
     }
 
     public ForgeTeam getTeam(String id) {
         if (id.isEmpty()) {
-            return noneTeam;
+            return repository.noneTeam();
         } else if (id.length() == 4) {
             try {
                 ForgeTeam team = getTeam(Integer.valueOf(id, 16).shortValue());
@@ -654,14 +443,16 @@ public class Universe {
                 if (team.isValid()) {
                     return team;
                 }
-            } catch (Exception ex) {}
+            } catch (NumberFormatException ignored) {
+                // Not a hexadecimal team UID; continue with regular ID lookup.
+            }
         }
 
         if (id.equals("fakeplayer")) {
             return fakePlayerTeam;
         }
 
-        ForgeTeam team = teams.get(id);
+        ForgeTeam team = repository.getTeam(id);
 
         if (team != null) {
             return team;
@@ -670,21 +461,21 @@ public class Universe {
         ForgePlayer player = getPlayer(id);
 
         if (player != null) {
-            return player.team;
+            return player.getTeam();
         }
 
-        return noneTeam;
+        return repository.noneTeam();
     }
 
     public ForgeTeam getTeam(short uid) {
         if (uid == 0) {
-            return noneTeam;
+            return repository.noneTeam();
         } else if (uid == 1) {
             return fakePlayerTeam;
         }
 
-        ForgeTeam team = teamMap.get(uid);
-        return team == null ? noneTeam : team;
+        ForgeTeam team = repository.getTeam(uid);
+        return team == null ? repository.noneTeam() : team;
     }
 
     public Collection<ForgePlayer> getOnlinePlayers() {
@@ -714,22 +505,23 @@ public class Universe {
     }
 
     public void addTeam(ForgeTeam team) {
-        teamMap.put(team.getUID(), team);
-        teams.put(team.getId(), team);
+        if (team.universe != this) {
+            throw new IllegalArgumentException("Team belongs to a different universe");
+        }
+        repository.addTeam(team);
     }
 
     public void removeTeam(ForgeTeam team) {
         File folder = new File(dataFolder, "teams/");
         new ForgeTeamDeletedEvent(team, folder).post();
-        teamMap.remove(team.getUID());
-        teams.remove(team.getId());
+        repository.removeTeam(team);
         FileUtils.deleteSafe(new File(folder, team.getId() + ".dat"));
         markDirty();
         clearCache();
     }
 
     public short generateTeamUID(short id) {
-        while (id == 0 || id == 1 || id == 2 || teamMap.containsKey(id)) {
+        while (id == 0 || id == 1 || id == 2 || repository.containsTeamUid(id)) {
             id = (short) MathUtils.RAND.nextInt();
         }
 
@@ -737,6 +529,6 @@ public class Universe {
     }
 
     public boolean shouldLoadLatmod() {
-        return latModFolder.exists() && !get().dataFolder.exists();
+        return persistence.shouldLoadLatmod();
     }
 }

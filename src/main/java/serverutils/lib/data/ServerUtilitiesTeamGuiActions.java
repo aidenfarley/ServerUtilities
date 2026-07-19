@@ -10,6 +10,7 @@ import net.minecraft.util.IChatComponent;
 import serverutils.ServerUtilities;
 import serverutils.lib.EnumTeamStatus;
 import serverutils.lib.gui.GuiIcons;
+import serverutils.lib.util.StringUtils;
 import serverutils.net.MessageMyTeamPlayerList;
 
 public class ServerUtilitiesTeamGuiActions {
@@ -26,12 +27,12 @@ public class ServerUtilitiesTeamGuiActions {
 
         @Override
         public Type getType(ForgePlayer player, NBTTagCompound data) {
-            return player.team.isModerator(player) ? Type.ENABLED : Type.DISABLED;
+            return player.getTeam().isModerator(player) ? Type.ENABLED : Type.DISABLED;
         }
 
         @Override
         public void onAction(ForgePlayer player, NBTTagCompound data) {
-            ServerUtilitiesAPI.editServerConfig(player.getPlayer(), player.team.getSettings(), player.team);
+            ServerUtilitiesAPI.editServerConfig(player.getPlayer(), player.getTeam().getSettings(), player.getTeam());
         }
     }.setTitle(new ChatComponentTranslation("gui.settings"));
 
@@ -52,7 +53,7 @@ public class ServerUtilitiesTeamGuiActions {
 
         @Override
         public Type getType(ForgePlayer player, NBTTagCompound data) {
-            return (player.team.isModerator(player) && player.team.universe.getPlayers().size() > 1) ? Type.ENABLED
+            return (player.getTeam().isModerator(player) && player.getUniverse().getPlayers().size() > 1) ? Type.ENABLED
                     : Type.DISABLED;
         }
 
@@ -63,7 +64,7 @@ public class ServerUtilitiesTeamGuiActions {
                 return;
             }
 
-            ForgePlayer p = player.team.universe.getPlayer(data.getString("player"));
+            ForgePlayer p = getPayloadPlayer(player, data);
 
             if (p == null || p == player) {
                 return;
@@ -71,43 +72,45 @@ public class ServerUtilitiesTeamGuiActions {
 
             switch (data.getString("action")) {
                 case "kick": {
-                    if (player.team.isMember(p)) {
-                        player.team.removeMember(p);
-                        player.team.setRequestingInvite(p, true);
+                    if (player.getTeam().isMember(p)) {
+                        player.getTeam().removeMember(p);
+                        player.getTeam().setRequestingInvite(p, true);
                     }
 
                     break;
                 }
                 case "invite": {
-                    player.team.setStatus(p, EnumTeamStatus.INVITED);
+                    player.getTeam().setStatus(p, EnumTeamStatus.INVITED);
 
-                    if (player.team.isRequestingInvite(p)) {
+                    if (player.getTeam().isRequestingInvite(p)) {
                         if (p.hasTeam()) {
-                            player.team.setRequestingInvite(p, false);
+                            player.getTeam().setRequestingInvite(p, false);
                         } else {
-                            player.team.addMember(p, false);
+                            player.getTeam().addMember(p, false);
                         }
                     } else if (p.isOnline()) {
                         IChatComponent component = new ChatComponentTranslation(
                                 "serverutilities.lang.team.invited_you",
-                                player.team,
+                                player.getTeam(),
                                 player.getDisplayName());
                         component.getChatStyle().setChatClickEvent(
-                                new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/team join " + player.team.getId()));
+                                new ClickEvent(
+                                        ClickEvent.Action.RUN_COMMAND,
+                                        "/team join " + player.getTeam().getId()));
                         p.getPlayer().addChatComponentMessage(component);
                     }
 
                     break;
                 }
                 case "cancel_invite": {
-                    if (player.team.getHighestStatus(p) == EnumTeamStatus.INVITED) {
-                        player.team.setStatus(p, EnumTeamStatus.NONE);
+                    if (player.getTeam().getHighestStatus(p) == EnumTeamStatus.INVITED) {
+                        player.getTeam().setStatus(p, EnumTeamStatus.NONE);
                     }
 
                     break;
                 }
                 case "deny_request": {
-                    player.team.setRequestingInvite(p, false);
+                    player.getTeam().setRequestingInvite(p, false);
                     break;
                 }
             }
@@ -118,7 +121,7 @@ public class ServerUtilitiesTeamGuiActions {
 
         @Override
         public Type getType(ForgePlayer player, NBTTagCompound data) {
-            return (player.team.isModerator(player) && player.team.universe.getPlayers().size() > 1) ? Type.ENABLED
+            return (player.getTeam().isModerator(player) && player.getUniverse().getPlayers().size() > 1) ? Type.ENABLED
                     : Type.DISABLED;
         }
 
@@ -128,10 +131,10 @@ public class ServerUtilitiesTeamGuiActions {
                 new MessageMyTeamPlayerList(getId(), player, ALLIES_PREDICATE).sendTo(player.getPlayer());
             }
 
-            ForgePlayer p = player.team.universe.getPlayer(data.getString("player"));
+            ForgePlayer p = getPayloadPlayer(player, data);
 
             if (p != null && p != player) {
-                player.team.setStatus(p, data.getBoolean("add") ? EnumTeamStatus.ALLY : EnumTeamStatus.NONE);
+                player.getTeam().setStatus(p, data.getBoolean("add") ? EnumTeamStatus.ALLY : EnumTeamStatus.NONE);
             }
         }
     };
@@ -144,7 +147,8 @@ public class ServerUtilitiesTeamGuiActions {
 
         @Override
         public Type getType(ForgePlayer player, NBTTagCompound data) {
-            return (player.team.isOwner(player) && player.team.getMembers().size() > 1) ? Type.ENABLED : Type.DISABLED;
+            return (player.getTeam().isOwner(player) && player.getTeam().getMembers().size() > 1) ? Type.ENABLED
+                    : Type.DISABLED;
         }
 
         @Override
@@ -154,10 +158,10 @@ public class ServerUtilitiesTeamGuiActions {
                 return;
             }
 
-            ForgePlayer p = player.team.universe.getPlayer(data.getString("player"));
+            ForgePlayer p = getPayloadPlayer(player, data);
 
             if (p != null && p != player) {
-                player.team.setStatus(p, data.getBoolean("add") ? EnumTeamStatus.MOD : EnumTeamStatus.NONE);
+                player.getTeam().setStatus(p, data.getBoolean("add") ? EnumTeamStatus.MOD : EnumTeamStatus.NONE);
             }
         }
     };
@@ -166,7 +170,7 @@ public class ServerUtilitiesTeamGuiActions {
 
         @Override
         public Type getType(ForgePlayer player, NBTTagCompound data) {
-            return (player.team.isModerator(player) && player.team.universe.getPlayers().size() > 1) ? Type.ENABLED
+            return (player.getTeam().isModerator(player) && player.getUniverse().getPlayers().size() > 1) ? Type.ENABLED
                     : Type.DISABLED;
         }
 
@@ -176,10 +180,10 @@ public class ServerUtilitiesTeamGuiActions {
                 new MessageMyTeamPlayerList(getId(), player, ENEMIES_PREDICATE).sendTo(player.getPlayer());
             }
 
-            ForgePlayer p = player.team.universe.getPlayer(data.getString("player"));
+            ForgePlayer p = getPayloadPlayer(player, data);
 
             if (p != null && p != player) {
-                player.team.setStatus(p, data.getBoolean("add") ? EnumTeamStatus.ENEMY : EnumTeamStatus.NONE);
+                player.getTeam().setStatus(p, data.getBoolean("add") ? EnumTeamStatus.ENEMY : EnumTeamStatus.NONE);
             }
         }
     };
@@ -188,13 +192,13 @@ public class ServerUtilitiesTeamGuiActions {
 
         @Override
         public Type getType(ForgePlayer player, NBTTagCompound data) {
-            return (!player.team.isOwner(player) || player.team.getMembers().size() <= 1) ? Type.ENABLED
+            return (!player.getTeam().isOwner(player) || player.getTeam().getMembers().size() <= 1) ? Type.ENABLED
                     : Type.INVISIBLE;
         }
 
         @Override
         public void onAction(ForgePlayer player, NBTTagCompound data) {
-            player.team.removeMember(player);
+            player.getTeam().removeMember(player);
             ServerUtilitiesAPI.sendCloseGuiPacket(player.getPlayer());
         }
     }.setRequiresConfirm();
@@ -207,7 +211,7 @@ public class ServerUtilitiesTeamGuiActions {
 
         @Override
         public Type getType(ForgePlayer player, NBTTagCompound data) {
-            return (!player.team.isOwner(player) || player.team.getMembers().size() <= 1) ? Type.INVISIBLE
+            return (!player.getTeam().isOwner(player) || player.getTeam().getMembers().size() <= 1) ? Type.INVISIBLE
                     : Type.ENABLED;
         }
 
@@ -217,11 +221,17 @@ public class ServerUtilitiesTeamGuiActions {
                 new MessageMyTeamPlayerList(getId(), player, MEMBERS_PREDICATE).sendTo(player.getPlayer());
             }
 
-            ForgePlayer p = player.team.universe.getPlayer(data.getString("player"));
+            ForgePlayer p = getPayloadPlayer(player, data);
 
             if (p != null && p != player) {
-                player.team.setStatus(p, EnumTeamStatus.OWNER);
+                player.getTeam().setStatus(p, EnumTeamStatus.OWNER);
             }
         }
     };
+
+    static ForgePlayer getPayloadPlayer(ForgePlayer actor, NBTTagCompound data) {
+        String identifier = data.getString("player");
+        ForgePlayer player = actor.getUniverse().getPlayer(StringUtils.fromString(identifier));
+        return player == null ? actor.getUniverse().getPlayer(identifier) : player;
+    }
 }

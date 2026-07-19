@@ -202,7 +202,7 @@ public class GuiHelper {
                 renderItem.renderItemOverlayIntoGUI(fontRenderer, textureManager, stack, 0, 0);
             }
         } catch (Exception ex) {
-            ex.printStackTrace();
+            serverutils.ServerUtilities.LOGGER.error("Failed to render an item stack", ex);
             result = false;
         }
 

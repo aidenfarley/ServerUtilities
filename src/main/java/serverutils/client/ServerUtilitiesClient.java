@@ -1,5 +1,6 @@
 package serverutils.client;
 
+import java.io.IOException;
 import java.util.Map;
 
 import net.minecraft.client.Minecraft;
@@ -20,6 +21,7 @@ import serverutils.ServerUtilities;
 import serverutils.ServerUtilitiesCommon;
 import serverutils.ServerUtilitiesConfig;
 import serverutils.client.gui.BuiltinChunkMap;
+import serverutils.client.gui.RestoreRecovery;
 import serverutils.client.gui.SidebarButtonManager;
 import serverutils.client.tab.TabChannelHandler;
 import serverutils.client.tab.TabDisplayHandler;
@@ -52,6 +54,13 @@ public class ServerUtilitiesClient extends ServerUtilitiesCommon {
 
     @Override
     public void preInit(FMLPreInitializationEvent event) {
+        try {
+            RestoreRecovery.recoverPendingFromWorkingDirectory();
+        } catch (IOException ex) {
+            throw new IllegalStateException(
+                    "An interrupted ServerUtilities restore could not be recovered; refusing to load worlds",
+                    ex);
+        }
         super.preInit(event);
         ClientUtils.localPlayerHead = new PlayerHeadIcon(Minecraft.getMinecraft().getSession().func_148256_e().getId());
         ((IReloadableResourceManager) Minecraft.getMinecraft().getResourceManager())

@@ -105,6 +105,6 @@ public class GuiPlayerRanks extends GuiButtonListBase {
 
     @Override
     public String getFilterText(Widget widget) {
-        return ((PlayerEntry) widget).username.toLowerCase();
+        return ((PlayerEntry) widget).username.toLowerCase(java.util.Locale.ROOT);
     }
 }

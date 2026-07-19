@@ -70,7 +70,7 @@ public class ChunkLoaderManager {
 
         } catch (IOException e) {
             this.reset(true);
-            e.printStackTrace();
+            serverutils.ServerUtilities.LOGGER.error("Failed to initialize the pregenerator", e);
         }
         return false;
     }

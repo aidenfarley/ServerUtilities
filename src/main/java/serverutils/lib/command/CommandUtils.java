@@ -155,7 +155,7 @@ public class CommandUtils {
             return OptionalInt.empty();
         }
 
-        return switch (args[index].toLowerCase()) {
+        return switch (args[index].toLowerCase(java.util.Locale.ROOT)) {
             case "overworld", "0" -> OptionalInt.of(0);
             case "nether", "-1" -> OptionalInt.of(-1);
             case "end", "1" -> OptionalInt.of(1);

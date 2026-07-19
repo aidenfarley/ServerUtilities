@@ -26,7 +26,7 @@ public class CmdTransferOwnership extends CmdBase {
 
         if (!p.hasTeam()) {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.error.no_team");
-        } else if (!p.team.isOwner(p)) {
+        } else if (!p.getTeam().isOwner(p)) {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.error.not_owner");
         }
 
@@ -34,10 +34,10 @@ public class CmdTransferOwnership extends CmdBase {
 
         ForgePlayer p1 = CommandUtils.getForgePlayer(sender, args[0]);
 
-        if (!p.team.equalsTeam(p1.team)) {
+        if (!p.getTeam().equalsTeam(p1.getTeam())) {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.error.not_member", p1.getDisplayName());
         }
 
-        p.team.setStatus(p1, EnumTeamStatus.OWNER);
+        p.getTeam().setStatus(p1, EnumTeamStatus.OWNER);
     }
 }

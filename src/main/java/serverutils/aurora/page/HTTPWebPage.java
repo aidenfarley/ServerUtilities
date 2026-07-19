@@ -64,7 +64,7 @@ public abstract class HTTPWebPage implements WebPage {
                 css = StringUtils.readString(is);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            serverutils.ServerUtilities.LOGGER.error("Failed to load Aurora stylesheet", e);
         }
 
         if (!css.isEmpty()) {

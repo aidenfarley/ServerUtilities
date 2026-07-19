@@ -120,7 +120,7 @@ public class ServerUtilitiesLoadedChunkManager implements ForgeChunkManager.Load
                                 + ex);
 
                 if (ServerUtilitiesConfig.debugging.print_more_errors) {
-                    ex.printStackTrace();
+                    ServerUtilities.LOGGER.error("Failed to load a forced chunk", ex);
                 }
             }
 

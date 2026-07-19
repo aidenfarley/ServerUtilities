@@ -47,7 +47,7 @@ public class FileUtils {
                 }
                 file.createNewFile();
             } catch (Exception e) {
-                e.printStackTrace();
+                serverutils.ServerUtilities.LOGGER.error("Failed to create file " + file.getAbsolutePath(), e);
             }
         }
 
@@ -55,24 +55,20 @@ public class FileUtils {
     }
 
     public static void save(File file, Iterable<String> list) throws Exception {
-        OutputStreamWriter fw = new OutputStreamWriter(new FileOutputStream(newFile(file)), StandardCharsets.UTF_8);
-        BufferedWriter br = new BufferedWriter(fw);
-
-        for (String s : list) {
-            br.write(s);
-            br.write('\n');
+        try (BufferedWriter writer = new BufferedWriter(
+                new OutputStreamWriter(new FileOutputStream(newFile(file)), StandardCharsets.UTF_8))) {
+            for (String s : list) {
+                writer.write(s);
+                writer.write('\n');
+            }
         }
-
-        br.close();
-        fw.close();
     }
 
     public static void save(File file, String string) throws Exception {
-        OutputStreamWriter fw = new OutputStreamWriter(new FileOutputStream(newFile(file)), StandardCharsets.UTF_8);
-        BufferedWriter br = new BufferedWriter(fw);
-        br.write(string);
-        br.close();
-        fw.close();
+        try (BufferedWriter writer = new BufferedWriter(
+                new OutputStreamWriter(new FileOutputStream(newFile(file)), StandardCharsets.UTF_8))) {
+            writer.write(string);
+        }
     }
 
     public static void saveSafe(final File file, final Iterable<String> list) {
@@ -80,7 +76,7 @@ public class FileUtils {
             try {
                 save(file, list);
             } catch (Exception ex) {
-                ex.printStackTrace();
+                serverutils.ServerUtilities.LOGGER.error("Failed to save string list to " + file.getAbsolutePath(), ex);
             }
 
             return false;
@@ -92,7 +88,7 @@ public class FileUtils {
             try {
                 save(file, string);
             } catch (Exception ex) {
-                ex.printStackTrace();
+                serverutils.ServerUtilities.LOGGER.error("Failed to save text to " + file.getAbsolutePath(), ex);
             }
 
             return false;
@@ -155,11 +151,11 @@ public class FileUtils {
 
     public static String getSizeString(double b) {
         if (b >= GB.getSize()) {
-            return String.format("%.1fGB", b / (double) GB.getSize());
+            return String.format(java.util.Locale.ROOT, "%.1fGB", b / (double) GB.getSize());
         } else if (b >= MB.getSize()) {
-            return String.format("%.1fMB", b / (double) MB.getSize());
+            return String.format(java.util.Locale.ROOT, "%.1fMB", b / (double) MB.getSize());
         } else if (b >= KB.getSize()) {
-            return String.format("%.1fKB", b / (double) KB.getSize());
+            return String.format(java.util.Locale.ROOT, "%.1fKB", b / (double) KB.getSize());
         }
 
         return b + "B";
@@ -213,10 +209,10 @@ public class FileUtils {
         ThreadedFileIOBase.threadedIOInstance.queueIO(() -> {
             try {
                 if (file.exists() && !delete(file)) {
-                    System.err.println("Failed to safely delete " + file.getAbsolutePath());
+                    serverutils.ServerUtilities.LOGGER.warn("Failed to safely delete {}", file.getAbsolutePath());
                 }
             } catch (Exception ex) {
-                ex.printStackTrace();
+                serverutils.ServerUtilities.LOGGER.error("Failed to safely delete " + file.getAbsolutePath(), ex);
             }
 
             return false;

@@ -3,7 +3,14 @@ package serverutils.lib.util;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FilterOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Set;
 
 import javax.annotation.Nullable;
@@ -36,10 +43,56 @@ public class NBTUtils {
     }
 
     public static void writeNBT(File file, NBTTagCompound tag) {
-        try (FileOutputStream stream = new FileOutputStream(FileUtils.newFile(file))) {
-            CompressedStreamTools.writeCompressed(tag, stream);
+        writeNBTChecked(file, tag);
+    }
+
+    /**
+     * Writes an NBT file through a sibling temporary file so a failed write never truncates the last valid copy.
+     *
+     * @return {@code true} only after the completed file has replaced the target
+     */
+    public static boolean writeNBTChecked(File file, NBTTagCompound tag) {
+        Path target = file.toPath().toAbsolutePath().normalize();
+        Path parent = target.getParent();
+        Path temporary = null;
+
+        try {
+            if (parent == null) {
+                throw new IOException("NBT file has no parent directory: " + target);
+            }
+
+            Files.createDirectories(parent);
+            temporary = Files.createTempFile(parent, target.getFileName().toString(), ".tmp");
+            try (FileOutputStream stream = new FileOutputStream(temporary.toFile())) {
+                OutputStream nonClosing = new FilterOutputStream(stream) {
+
+                    @Override
+                    public void close() throws IOException {
+                        flush();
+                    }
+                };
+                CompressedStreamTools.writeCompressed(tag, nonClosing);
+                stream.getChannel().force(true);
+            }
+
+            try {
+                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ex) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+            temporary = null;
+            return true;
         } catch (Exception ex) {
-            ex.printStackTrace();
+            serverutils.ServerUtilities.LOGGER.error("Failed to write NBT file " + file.getAbsolutePath(), ex);
+            return false;
+        } finally {
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException ex) {
+                    serverutils.ServerUtilities.LOGGER.warn("Failed to delete temporary NBT file {}", temporary, ex);
+                }
+            }
         }
     }
 
@@ -62,6 +115,8 @@ public class NBTUtils {
             try {
                 return CompressedStreamTools.read(file);
             } catch (Exception ex1) {
+                ex1.addSuppressed(ex);
+                serverutils.ServerUtilities.LOGGER.error("Failed to read NBT file " + file.getAbsolutePath(), ex1);
                 return null;
             }
         }

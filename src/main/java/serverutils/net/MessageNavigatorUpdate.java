@@ -46,7 +46,7 @@ public class MessageNavigatorUpdate extends MessageToClient {
                         continue;
                     }
 
-                    if (!canSeeOtherJourneymap && !p.team.equalsTeam(chunkTeam)) {
+                    if (!canSeeOtherJourneymap && !p.getTeam().equalsTeam(chunkTeam)) {
                         continue;
                     }
 

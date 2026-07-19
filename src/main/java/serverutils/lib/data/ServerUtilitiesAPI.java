@@ -15,7 +15,7 @@ import net.minecraft.util.ResourceLocation;
 import serverutils.ServerUtilities;
 import serverutils.ServerUtilitiesCommon;
 import serverutils.ServerUtilitiesConfig;
-import serverutils.ServerUtilitiesRegistry;
+import serverutils.api.ServerUtilitiesRegistry;
 import serverutils.events.IReloadHandler;
 import serverutils.events.ServerReloadEvent;
 import serverutils.lib.EnumReloadType;
@@ -41,7 +41,8 @@ public class ServerUtilitiesAPI {
         HashSet<ResourceLocation> failed = new HashSet<>();
         ServerReloadEvent event = new ServerReloadEvent(universe, sender, type, id, failed);
 
-        for (Map.Entry<ResourceLocation, IReloadHandler> entry : ServerUtilitiesRegistry.RELOAD_IDS.entrySet()) {
+        for (Map.Entry<ResourceLocation, IReloadHandler> entry : ServerUtilitiesRegistry.reloadHandlersView()
+                .entrySet()) {
             try {
                 if (event.reload(entry.getKey()) && !entry.getValue().onReload(event)) {
                     event.failedToReload(entry.getKey());
@@ -50,7 +51,7 @@ public class ServerUtilitiesAPI {
                 event.failedToReload(entry.getKey());
 
                 if (ServerUtilitiesConfig.debugging.print_more_errors) {
-                    ex.printStackTrace();
+                    ServerUtilities.LOGGER.error("Server reload handler failed for " + entry.getKey(), ex);
                 }
             }
         }
@@ -112,7 +113,7 @@ public class ServerUtilitiesAPI {
             return ConfigNull.INSTANCE;
         }
 
-        ConfigValueProvider provider = ServerUtilitiesRegistry.CONFIG_VALUE_PROVIDERS.get(id);
+        ConfigValueProvider provider = ServerUtilitiesRegistry.findConfigValueProvider(id);
         Objects.requireNonNull(provider, "Unknown Config ID: " + id);
         ConfigValue value = provider.get();
         return value == null || value.isNull() ? ConfigNull.INSTANCE : value;
@@ -139,7 +140,7 @@ public class ServerUtilitiesAPI {
         }
 
         ForgePlayer p2 = Universe.get().getPlayer(player2);
-        return p2 != null && p2.hasTeam() && p1.team.equalsTeam(p2.team);
+        return p2 != null && p2.hasTeam() && p1.getTeam().equalsTeam(p2.getTeam());
     }
 
     public static boolean isPlayerInTeam(UUID player, String team) {
@@ -153,7 +154,7 @@ public class ServerUtilitiesAPI {
             return false;
         }
 
-        return p.hasTeam() ? p.team.getId().equals(team) : team.isEmpty();
+        return p.hasTeam() ? p.getTeam().getId().equals(team) : team.isEmpty();
     }
 
     public static boolean isPlayerInTeam(UUID player, int team) {
@@ -167,7 +168,7 @@ public class ServerUtilitiesAPI {
             return false;
         }
 
-        return p.hasTeam() ? p.team.getUID() == team : team == 0;
+        return p.hasTeam() ? p.getTeam().getUID() == team : team == 0;
     }
 
     public static String getTeam(UUID player) {
@@ -176,7 +177,7 @@ public class ServerUtilitiesAPI {
         }
 
         ForgePlayer p = Universe.get().getPlayer(player);
-        return p == null ? "" : p.team.getId();
+        return p == null ? "" : p.getTeam().getId();
     }
 
     public static short getTeamID(UUID player) {
@@ -185,7 +186,7 @@ public class ServerUtilitiesAPI {
         }
 
         ForgePlayer p = Universe.get().getPlayer(player);
-        return p == null ? 0 : p.team.getUID();
+        return p == null ? 0 : p.getTeam().getUID();
     }
 
     public static void reload(MinecraftServer server) {

@@ -49,7 +49,9 @@ public class TransferCommand extends CommandBase {
                         throw new WrongUsageException(getCommandUsage(sender));
                     }
                     hostname = hostname.substring(0, colonIdx);
-                } catch (NumberFormatException ignored) {}
+                } catch (NumberFormatException ignored) {
+                    // Use the default port when no numeric port suffix is present.
+                }
             }
         }
 

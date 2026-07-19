@@ -43,7 +43,10 @@ public final class InvSeeRegistry {
             if ((modId == null || Loader.isModLoaded(modId)) && (isLoaded == null || isLoaded.get())) {
                 try {
                     registerInventory(inventory.getDeclaredConstructor().newInstance());
-                } catch (Exception ignored) {}
+                } catch (ReflectiveOperationException ex) {
+                    serverutils.ServerUtilities.LOGGER
+                            .warn("Failed to register inventory integration " + inventory.getName(), ex);
+                }
             }
         }
     }

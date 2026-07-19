@@ -46,7 +46,7 @@ public abstract class GuiButtonListBase extends GuiBase {
     }
 
     public String getFilterText(Widget widget) {
-        return widget.getTitle().toLowerCase();
+        return widget.getTitle().toLowerCase(java.util.Locale.ROOT);
     }
 
     @Override
@@ -65,7 +65,7 @@ public abstract class GuiButtonListBase extends GuiBase {
             @Override
             public void add(Widget widget) {
                 if (!hasSearchBox || searchBox.getText().isEmpty()
-                        || getFilterText(widget).contains(searchBox.getText().toLowerCase())
+                        || getFilterText(widget).contains(searchBox.getText().toLowerCase(java.util.Locale.ROOT))
                         || widget instanceof CheckBoxList) {
                     super.add(widget);
                 }
@@ -162,7 +162,7 @@ public abstract class GuiButtonListBase extends GuiBase {
     }
 
     public String getTextInSearchBox() {
-        return searchBox.getText().toLowerCase();
+        return searchBox.getText().toLowerCase(java.util.Locale.ROOT);
     }
 
     public void focus() {

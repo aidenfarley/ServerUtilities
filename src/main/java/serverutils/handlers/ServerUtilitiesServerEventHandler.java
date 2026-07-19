@@ -324,7 +324,8 @@ public class ServerUtilitiesServerEventHandler {
     @SubscribeEvent
     public static void onServerChatEventLog(ServerChatEvent event) {
         if (ServerUtilitiesConfig.world.logging.chat_enable) {
-            ServerUtilitiesUniverseData.chatLog(String.format("From %s: %s", event.username, event.message));
+            ServerUtilitiesUniverseData
+                    .chatLog(String.format(java.util.Locale.ROOT, "From %s: %s", event.username, event.message));
         }
     }
 }

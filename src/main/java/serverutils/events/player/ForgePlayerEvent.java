@@ -8,7 +8,7 @@ public abstract class ForgePlayerEvent extends ForgeTeamEvent {
     private final ForgePlayer player;
 
     public ForgePlayerEvent(ForgePlayer p) {
-        super(p.team);
+        super(p.getTeam());
         player = p;
     }
 

@@ -6,16 +6,17 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.nio.file.Paths;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -50,6 +51,7 @@ import serverutils.lib.gui.Widget;
 import serverutils.lib.gui.WidgetLayout;
 import serverutils.lib.gui.misc.GuiButtonListBase;
 import serverutils.lib.icon.Icon;
+import serverutils.lib.util.BackupGlobUtils;
 import serverutils.lib.util.FileUtils;
 import serverutils.lib.util.compression.ICompress;
 import serverutils.lib.util.misc.MouseButton;
@@ -58,7 +60,8 @@ import serverutils.task.backup.BackupTask;
 @EventBusSubscriber(side = Side.CLIENT)
 public class GuiRestoreBackup extends GuiButtonListBase {
 
-    private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss");
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter
+            .ofPattern("yyyy-MM-dd-HH-mm-ss", Locale.ROOT);
     private static final Set<File> allBackupFiles = new ObjectOpenHashSet<>();
     private static Object2ObjectMap<String, List<File>> worldBackups;
     private final List<File> backupFiles;
@@ -147,14 +150,19 @@ public class GuiRestoreBackup extends GuiButtonListBase {
         File[] files = BackupTask.BACKUP_FOLDER.listFiles();
         if (files == null) return;
 
-        ICompress compressor = ICompress.createCompressor();
-        for (File file : files) {
-            allBackupFiles.add(file);
-            try {
-                String worldName = compressor.getWorldName(file);
-                if (worldName == null) continue;
-                worldBackups.computeIfAbsent(worldName, k -> new ObjectArrayList<>()).add(file);
-            } catch (IOException ignored) {}
+        try (ICompress compressor = ICompress.createCompressor()) {
+            for (File file : files) {
+                allBackupFiles.add(file);
+                try {
+                    String worldName = compressor.getWorldName(file);
+                    if (worldName == null) continue;
+                    worldBackups.computeIfAbsent(worldName, k -> new ObjectArrayList<>()).add(file);
+                } catch (IOException ex) {
+                    serverutils.ServerUtilities.LOGGER.warn("Failed to inspect backup " + file.getAbsolutePath(), ex);
+                }
+            }
+        } catch (Exception ex) {
+            serverutils.ServerUtilities.LOGGER.warn("Failed to close the backup reader", ex);
         }
     }
 
@@ -221,28 +229,22 @@ public class GuiRestoreBackup extends GuiButtonListBase {
         }
     }
 
-    @SuppressWarnings("ResultOfMethodCallIgnored")
-    private void renameAdditionalFiles(File previousRoot, boolean includeGlobal) {
+    private void moveAdditionalFiles(RestoreTransaction transaction, boolean includeGlobal) throws IOException {
         for (String pattern : backups.additional_backup_files) {
             if (!pattern.contains("$WORLDNAME") && !includeGlobal) {
                 continue;
             }
-            pattern = pattern.replace("$WORLDNAME", worldName);
+            String resolvedPattern = BackupGlobUtils.substituteLiteralPath(pattern, worldName);
 
             // Gather list of all old files
             List<File> previousFiles;
             int firstWildcardIndex = pattern.indexOf('*');
             if (firstWildcardIndex == -1) {
-                previousFiles = FileUtils.listTree(new File(pattern));
+                previousFiles = FileUtils.listTree(new File(resolvedPattern));
             } else {
-                Path rootFolder = Paths.get(pattern.substring(0, firstWildcardIndex));
-
-                // If wildcard was not at the start of a directory, get the parent
-                if (firstWildcardIndex != 0 && (pattern.charAt(firstWildcardIndex - 1) != '/')) {
-                    rootFolder = rootFolder.getParent();
-                }
-
-                PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
+                Path rootFolder = BackupGlobUtils.searchRoot(pattern, worldName);
+                PathMatcher matcher = FileSystems.getDefault()
+                        .getPathMatcher("glob:" + BackupGlobUtils.substituteGlob(pattern, worldName));
                 List<File> fileCandidates = FileUtils.listTree(rootFolder.toFile());
                 previousFiles = new ArrayList<>();
                 for (File file : fileCandidates) {
@@ -252,12 +254,11 @@ public class GuiRestoreBackup extends GuiButtonListBase {
                 }
             }
 
-            // Move all old files into backup
+            // Move all old files into the rollback journal.
             for (File file : previousFiles) {
-                String pathRelative = FileUtils.getRelativePath(file);
-                File destFile = new File(previousRoot, pathRelative);
-                destFile.getParentFile().mkdirs();
-                file.renameTo(destFile);
+                if (!transaction.isProtectedPath(file.toPath())) {
+                    transaction.moveAside(file.toPath());
+                }
             }
         }
     }
@@ -276,35 +277,81 @@ public class GuiRestoreBackup extends GuiButtonListBase {
                 () -> { loadBackup(file, true); });
     }
 
-    @SuppressWarnings("ResultOfMethodCallIgnored")
     private void loadBackup(File file, boolean includeGlobal) {
-        File savesDir = new File("saves/");
-        File worldDir = new File(savesDir, worldName);
-        File saveCopy = new File(savesDir, worldName + "_old");
+        Path serverRoot = Paths.get("").toAbsolutePath().normalize();
+        Path stagingRoot = null;
+        RestoreTransaction transaction = null;
 
-        while (saveCopy.exists()) {
-            saveCopy = new File(savesDir, saveCopy.getName() + "_old");
-        }
-
-        worldDir.renameTo(saveCopy);
-
-        try (ICompress compressor = ICompress.createCompressor()) {
-            boolean isOldBackup = compressor.isOldBackup(file);
-            if (!isOldBackup) {
-                File previousRoot = new File("backups_before_restore/");
-                previousRoot = new File(previousRoot, DATE_FORMAT.format(Calendar.getInstance().getTime()));
-                renameAdditionalFiles(previousRoot, includeGlobal);
+        try {
+            RestoreTransaction.recoverPending(serverRoot);
+            Path worldRelative = Paths.get(worldName);
+            if (worldName.isEmpty() || worldName.indexOf('/') >= 0
+                    || worldName.indexOf('\\') >= 0
+                    || worldName.indexOf(':') >= 0
+                    || worldRelative.isAbsolute()
+                    || worldRelative.getNameCount() != 1
+                    || worldName.equals(".")
+                    || worldName.equals("..")) {
+                throw new IOException("Backup has an invalid world name: " + worldName);
             }
-            compressor.extractArchive(file, includeGlobal, isOldBackup);
+
+            Path savesDir = serverRoot.resolve("saves");
+            Path worldDir = savesDir.resolve(worldRelative).normalize();
+            Path saveCopy = savesDir.resolve(worldName + "_old");
+            while (Files.exists(saveCopy)) {
+                saveCopy = savesDir.resolve(saveCopy.getFileName() + "_old");
+            }
+
+            Path stagingBase = serverRoot.resolve("serverutilities/restore-staging");
+            Files.createDirectories(stagingBase);
+            stagingRoot = Files.createTempDirectory(stagingBase, "restore-");
+
+            Path previousRoot = serverRoot.resolve("backups_before_restore")
+                    .resolve(DATE_FORMAT.format(LocalDateTime.now()));
+            while (Files.exists(previousRoot)) {
+                previousRoot = previousRoot.resolveSibling(previousRoot.getFileName() + "_old");
+            }
+
+            transaction = new RestoreTransaction(serverRoot, previousRoot);
+            transaction.protect(stagingBase);
+            transaction.protect(serverRoot.resolve("backups_before_restore"));
+            Path archivePath = file.toPath().toAbsolutePath().normalize();
+            if (archivePath.startsWith(serverRoot)) {
+                transaction.protect(archivePath);
+            }
+
+            boolean isOldBackup;
+            try (ICompress compressor = ICompress.createCompressor()) {
+                isOldBackup = compressor.isOldBackup(file);
+                compressor.extractArchiveTo(stagingRoot.toFile(), file, includeGlobal, isOldBackup, worldName);
+            }
+
+            transaction.moveAside(worldDir, saveCopy);
+            if (!isOldBackup) {
+                moveAdditionalFiles(transaction, includeGlobal);
+            }
+
+            transaction.install(stagingRoot);
+            transaction.commit();
             closeGui();
         } catch (Exception e) {
             ServerUtilities.LOGGER.error("Failed to restore backup", e);
-            FileUtils.delete(worldDir);
-            saveCopy.renameTo(worldDir);
+            if (transaction != null) {
+                try {
+                    transaction.rollback();
+                } catch (IOException rollbackError) {
+                    e.addSuppressed(rollbackError);
+                    ServerUtilities.LOGGER.error("Failed to roll back the backup restore", rollbackError);
+                }
+            }
             Minecraft.getMinecraft().displayGuiScreen(
                     new GuiErrorScreen(
                             StatCollector.translateToLocal("serverutilities.gui.backup.error"),
                             EnumChatFormatting.RED + e.getMessage()));
+        } finally {
+            if (stagingRoot != null) {
+                FileUtils.delete(stagingRoot.toFile());
+            }
         }
     }
 

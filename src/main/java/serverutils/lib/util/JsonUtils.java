@@ -93,7 +93,7 @@ public class JsonUtils {
             try {
                 writer.write("null");
             } catch (Exception ex) {
-                ex.printStackTrace();
+                serverutils.ServerUtilities.LOGGER.error("Failed to write JSON null value", ex);
             }
 
             return;
@@ -127,7 +127,7 @@ public class JsonUtils {
                 StandardCharsets.UTF_8); BufferedWriter writer = new BufferedWriter(output)) {
             toJson(writer, element, prettyPrinting);
         } catch (Exception ex) {
-            ex.printStackTrace();
+            serverutils.ServerUtilities.LOGGER.error("Failed to write JSON file " + file.getAbsolutePath(), ex);
         }
     }
 
@@ -663,14 +663,14 @@ public class JsonUtils {
     }
 
     public static JsonElement fromJson(File json) {
-        try {
-            if (json == null || !json.exists()) return JsonNull.INSTANCE;
-            BufferedReader reader = new BufferedReader(new FileReader(json));
-            JsonElement e = fromJson(reader);
-            reader.close();
-            return e;
-        } catch (Exception ex) {}
-        return JsonNull.INSTANCE;
+        if (json == null || !json.exists()) return JsonNull.INSTANCE;
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(json))) {
+            return fromJson(reader);
+        } catch (Exception ex) {
+            serverutils.ServerUtilities.LOGGER.warn("Failed to read JSON file " + json.getAbsolutePath(), ex);
+            return JsonNull.INSTANCE;
+        }
     }
 
     public static void copy(JsonObject from, JsonObject to) {

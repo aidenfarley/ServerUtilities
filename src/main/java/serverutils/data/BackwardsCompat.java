@@ -1,7 +1,7 @@
 package serverutils.data;
 
 import java.io.File;
-import java.io.FileInputStream;
+import java.nio.file.Files;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -62,7 +62,7 @@ public class BackwardsCompat {
                 UUID uuid = StringUtils.fromString(tag1.getString("UUID"));
                 if (uuid != null) {
                     ForgePlayer player = new ForgePlayer(Universe.get(), uuid, tag1.getString("Name"));
-                    Universe.get().players.put(uuid, player);
+                    Universe.get().registerPlayer(uuid, player);
 
                     player.lastTimeSeen = tag1.getCompoundTag("Stats").getLong("LastSeen");
                     // Load player homes from Latmod
@@ -97,19 +97,19 @@ public class BackwardsCompat {
 
                     if (p != null) {
                         // If player exists in the ClaimedChunks.json file, create a team for them
-                        if (p.team.type == TeamType.NONE) {
+                        if (p.getTeam().type == TeamType.NONE) {
                             ForgeTeam team = new ForgeTeam(
                                     universe,
                                     universe.generateTeamUID((short) 0),
                                     p.getName(),
                                     TeamType.PLAYER);
-                            team.owner = p;
+                            team.initializeOwner(p);
                             team.setColor(EnumTeamColor.NAME_MAP.getRandom(universe.world.rand));
                             universe.addTeam(team);
-                            p.team = team;
+                            p.setTeam(team);
                             p.markDirty();
                         }
-                        ServerUtilitiesTeamData data = ServerUtilitiesTeamData.get(p.team);
+                        ServerUtilitiesTeamData data = ServerUtilitiesTeamData.get(p.getTeam());
                         JsonArray chunksList = e1.getValue().getAsJsonArray();
 
                         for (int k = 0; k < chunksList.size(); k++) {
@@ -124,10 +124,10 @@ public class BackwardsCompat {
                                 ClaimedChunks.instance.addChunk(c);
                             }
                         }
-                        p.team.markDirty();
+                        p.getTeam().markDirty();
                     }
                 } catch (Exception ex) {
-                    ex.printStackTrace();
+                    ServerUtilities.LOGGER.error("Failed to import legacy claimed chunk data", ex);
                 }
             }
         }
@@ -143,11 +143,12 @@ public class BackwardsCompat {
         if (warps != null) for (Map.Entry<String, JsonElement> e : warps.entrySet()) {
             if (e.getValue().isJsonArray()) {
                 int[] val = fromIntArray(e.getValue());
-                ServerUtilitiesUniverseData.WARPS.set(e.getKey().toLowerCase(), BlockDimPos.fromIntArray(val));
+                ServerUtilitiesUniverseData.WARPS
+                        .set(e.getKey().toLowerCase(java.util.Locale.ROOT), BlockDimPos.fromIntArray(val));
             } else {
                 JsonObject o = e.getValue().getAsJsonObject();
                 ServerUtilitiesUniverseData.WARPS.set(
-                        e.getKey().toLowerCase(),
+                        e.getKey().toLowerCase(java.util.Locale.ROOT),
                         new BlockDimPos(
                                 o.get("x").getAsInt(),
                                 o.get("y").getAsInt(),
@@ -227,17 +228,14 @@ public class BackwardsCompat {
         try {
             return CompressedStreamTools.read(f);
         } catch (Exception e) {
-            e.printStackTrace();
+            ServerUtilities.LOGGER.warn("Failed to read legacy compressed data; trying the old format", e);
             ServerUtilities.LOGGER.info("Possibly corrupted / old file. Trying the old method");
 
             try {
-                FileInputStream is = new FileInputStream(f);
-                byte[] b = new byte[is.available()];
-                is.read(b);
-                is.close();
+                byte[] b = Files.readAllBytes(f.toPath());
                 return CompressedStreamTools.func_152457_a(b, NBTSizeTracker.field_152451_a);
             } catch (Exception e1) {
-                e1.printStackTrace();
+                ServerUtilities.LOGGER.error("Failed to read legacy data using either supported format", e1);
             }
         }
         return null;

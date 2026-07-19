@@ -3,6 +3,14 @@ package serverutils.client.gui;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FilterOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.channels.FileChannel;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 import net.minecraft.client.AnvilConverterException;
 import net.minecraft.client.Minecraft;
@@ -62,13 +70,13 @@ public class GuiToggleCheatsButton extends GuiButton {
         }
 
         try {
-            toggleCheats(currentWorld);
+            writeCheatsSetting(currentWorld);
             SaveFormatComparator saveformatcomparator = (SaveFormatComparator) gui.field_146639_s
                     .get(gui.field_146640_r);
             ((ISaveFormatComparatorWithCheatSetter) saveformatcomparator)
                     .serverutilities$setCheatsEnabled(!saveformatcomparator.getCheatsEnabled());
-        } catch (AnvilConverterException e) {
-            e.printStackTrace();
+        } catch (AnvilConverterException | IOException e) {
+            serverutils.ServerUtilities.LOGGER.error("Failed to toggle cheats for the selected world", e);
         }
 
         return true;
@@ -79,6 +87,14 @@ public class GuiToggleCheatsButton extends GuiButton {
      */
     @SideOnly(Side.CLIENT)
     public void toggleCheats(String worldName) throws AnvilConverterException {
+        try {
+            writeCheatsSetting(worldName);
+        } catch (IOException ex) {
+            serverutils.ServerUtilities.LOGGER.error("Failed to toggle cheats for world " + worldName, ex);
+        }
+    }
+
+    private void writeCheatsSetting(String worldName) throws AnvilConverterException, IOException {
         File saveFolder = new File(
                 ((SaveFormatOld) Minecraft.getMinecraft().getSaveLoader()).savesDirectory,
                 worldName);
@@ -89,17 +105,65 @@ public class GuiToggleCheatsButton extends GuiButton {
 
         if (!levelDataFile.exists()) return;
 
+        NBTTagCompound parentTag;
+        try (FileInputStream input = new FileInputStream(levelDataFile)) {
+            parentTag = CompressedStreamTools.readCompressed(input);
+        }
+
+        NBTTagCompound dataTag = parentTag.getCompoundTag("Data");
+        byte allowCommands = dataTag.getByte("allowCommands");
+        dataTag.setByte("allowCommands", allowCommands == 0 ? (byte) 1 : (byte) 0);
+        replaceLevelData(levelDataFile, parentTag);
+    }
+
+    static void replaceLevelData(File levelDataFile, NBTTagCompound parentTag) throws IOException {
+        Path target = levelDataFile.toPath().toAbsolutePath().normalize();
+        Path parent = target.getParent();
+        if (parent == null) {
+            throw new IOException("World metadata has no parent directory: " + target);
+        }
+
+        Path replacement = Files.createTempFile(parent, "level", ".dat_new");
+        Path oldReplacement = null;
         try {
-            NBTTagCompound parentTag = CompressedStreamTools.readCompressed(new FileInputStream(levelDataFile));
-            NBTTagCompound dataTag = parentTag.getCompoundTag("Data");
+            try (FileOutputStream output = new FileOutputStream(replacement.toFile())) {
+                OutputStream nonClosing = new FilterOutputStream(output) {
 
-            byte allowCommands = dataTag.getByte("allowCommands");
-            allowCommands = allowCommands == 0 ? (byte) 1 : (byte) 0;
-            dataTag.setByte("allowCommands", allowCommands);
+                    @Override
+                    public void close() throws IOException {
+                        flush();
+                    }
+                };
+                CompressedStreamTools.writeCompressed(parentTag, nonClosing);
+                output.getChannel().force(true);
+            }
 
-            CompressedStreamTools.writeCompressed(parentTag, new FileOutputStream(levelDataFile));
-        } catch (Exception exception) {
-            exception.printStackTrace();
+            Path old = parent.resolve("level.dat_old");
+            oldReplacement = Files.createTempFile(parent, "level", ".dat_old");
+            Files.copy(target, oldReplacement, StandardCopyOption.REPLACE_EXISTING);
+            try (FileChannel oldOutput = FileChannel.open(oldReplacement, java.nio.file.StandardOpenOption.WRITE)) {
+                oldOutput.force(true);
+            }
+            moveReplacing(oldReplacement, old);
+            oldReplacement = null;
+
+            moveReplacing(replacement, target);
+            replacement = null;
+        } finally {
+            if (replacement != null) {
+                Files.deleteIfExists(replacement);
+            }
+            if (oldReplacement != null) {
+                Files.deleteIfExists(oldReplacement);
+            }
+        }
+    }
+
+    private static void moveReplacing(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException ex) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 

@@ -51,7 +51,7 @@ public class MessageViewCrashDelete extends MessageToServer {
                     }
                 } catch (Exception ex) {
                     if (ServerUtilitiesConfig.debugging.print_more_errors) {
-                        ex.printStackTrace();
+                        serverutils.ServerUtilities.LOGGER.error("Failed to delete a crash report", ex);
                     }
                 }
             }

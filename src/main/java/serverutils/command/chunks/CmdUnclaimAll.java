@@ -47,7 +47,7 @@ public class CmdUnclaimAll extends CmdBase {
 
         if (p.hasTeam()) {
             OptionalInt dimension = CommandUtils.parseDimension(sender, args, 0);
-            ClaimedChunks.instance.unclaimAllChunks(p, p.team, dimension);
+            ClaimedChunks.instance.unclaimAllChunks(p, p.getTeam(), dimension);
             CHUNK_MODIFIED.send(player, "serverutilities.lang.chunks.unclaimed_all");
         } else {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.error.no_team");

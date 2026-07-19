@@ -59,15 +59,15 @@ public class CmdCreate extends CmdBase {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.id_invalid");
         }
 
-        if (p.team.universe.getTeam(args[0]).isValid()) {
+        if (p.getUniverse().getTeam(args[0]).isValid()) {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.id_already_exists");
         }
 
-        p.team.universe.clearCache();
+        p.getUniverse().clearCache();
 
         ForgeTeam team = new ForgeTeam(
-                p.team.universe,
-                p.team.universe.generateTeamUID((short) 0),
+                p.getUniverse(),
+                p.getUniverse().generateTeamUID((short) 0),
                 args[0],
                 TeamType.PLAYER);
 
@@ -77,8 +77,8 @@ public class CmdCreate extends CmdBase {
             team.setColor(EnumTeamColor.NAME_MAP.getRandom(sender.getEntityWorld().rand));
         }
 
-        p.team = team;
-        team.owner = p;
+        p.setTeam(team);
+        team.initializeOwner(p);
         team.universe.addTeam(team);
         new ForgeTeamCreatedEvent(team).post();
         ForgeTeamPlayerJoinedEvent event = new ForgeTeamPlayerJoinedEvent(p);

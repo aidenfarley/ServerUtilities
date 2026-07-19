@@ -79,7 +79,7 @@ public class ServerUtilitiesWorldEventHandler {
             String[] mobTypes = ServerUtilitiesConfig.world.mobTypesToBlock;
             if (mobTypes.length == 0) return false;
             for (String string : mobTypes) {
-                EnumCreature creature = EnumCreature.NAME_MAP.getNullable(string.toLowerCase());
+                EnumCreature creature = EnumCreature.NAME_MAP.getNullable(string.toLowerCase(java.util.Locale.ROOT));
                 if (creature != null && creature.creatureType.getCreatureClass().isAssignableFrom(entity.getClass())) {
                     return false;
                 }

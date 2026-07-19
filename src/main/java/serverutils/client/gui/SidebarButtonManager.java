@@ -80,7 +80,7 @@ public enum SidebarButtonManager implements IResourceManagerReloadListener {
                 }
             } catch (Exception ex) {
                 if (!(ex instanceof FileNotFoundException)) {
-                    ex.printStackTrace();
+                    serverutils.ServerUtilities.LOGGER.error("Failed to load sidebar button groups", ex);
                 }
             }
         }
@@ -134,7 +134,7 @@ public enum SidebarButtonManager implements IResourceManagerReloadListener {
                 }
             } catch (Exception ex) {
                 if (!(ex instanceof FileNotFoundException)) {
-                    ex.printStackTrace();
+                    serverutils.ServerUtilities.LOGGER.error("Failed to load sidebar buttons", ex);
                 }
             }
         }

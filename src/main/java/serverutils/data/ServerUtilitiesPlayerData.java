@@ -119,7 +119,7 @@ public class ServerUtilitiesPlayerData extends PlayerData {
                         && player.hasPermission(ServerUtilitiesPermissions.CHAT_NICKNAME_SET));
         IChatComponent info = new ChatComponentTranslation(
                 "player_config.serverutilities.show_team_prefix.info",
-                player.team.getTitle());
+                player.getTeam().getTitle());
         config.addBool("show_team_prefix", () -> showTeamPrefix, v -> showTeamPrefix = v, false).setInfo(info)
                 .setExcluded(ServerUtilitiesConfig.teams.force_team_prefix);
 
@@ -227,7 +227,8 @@ public class ServerUtilitiesPlayerData extends PlayerData {
 
         if (ServerUtilitiesConfig.teams.force_team_prefix || showTeamPrefix) {
             IChatComponent end = new ChatComponentText("] ");
-            IChatComponent prefix = new ChatComponentText("[").appendSibling(player.team.getTitle()).appendSibling(end);
+            IChatComponent prefix = new ChatComponentText("[").appendSibling(player.getTeam().getTitle())
+                    .appendSibling(end);
             cachedNameForChat = new ChatComponentText("").appendSibling(prefix).appendSibling(cachedNameForChat);
         }
 

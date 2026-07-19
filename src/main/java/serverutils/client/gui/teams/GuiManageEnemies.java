@@ -42,7 +42,7 @@ public class GuiManageEnemies extends GuiManagePlayersBase {
         public void onClicked(MouseButton button) {
             GuiHelper.playClickSound();
             NBTTagCompound data = new NBTTagCompound();
-            data.setString("player", entry.name);
+            data.setString("player", entry.uuid.toString());
 
             if (entry.status == EnumTeamStatus.ENEMY) {
                 data.setBoolean("add", false);

@@ -1,6 +1,5 @@
 package serverutils;
 
-import java.util.Locale;
 import java.util.Map;
 
 import javax.annotation.Nullable;
@@ -65,7 +64,6 @@ public class ServerUtilities {
 
     @Mod.EventHandler
     public void onPreInit(FMLPreInitializationEvent event) {
-        Locale.setDefault(Locale.US);
         PROXY.preInit(event);
     }
 

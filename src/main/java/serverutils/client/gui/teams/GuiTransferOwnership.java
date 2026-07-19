@@ -35,7 +35,7 @@ public class GuiTransferOwnership extends GuiManagePlayersBase {
                     () -> {
                         getGui().closeGui(false);
                         NBTTagCompound data = new NBTTagCompound();
-                        data.setString("player", entry.name);
+                        data.setString("player", entry.uuid.toString());
                         new MessageMyTeamAction(ServerUtilitiesTeamGuiActions.TRANSFER_OWNERSHIP.getId(), data)
                                 .sendToServer();
                     });

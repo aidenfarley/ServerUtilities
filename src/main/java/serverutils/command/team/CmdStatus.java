@@ -43,7 +43,7 @@ public class CmdStatus extends CmdBase {
 
         if (!p.hasTeam()) {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.error.no_team");
-        } else if (!p.team.isModerator(p)) {
+        } else if (!p.getTeam().isModerator(p)) {
             throw new CommandException("commands.generic.permission");
         }
 
@@ -51,20 +51,20 @@ public class CmdStatus extends CmdBase {
         ForgePlayer p1 = CommandUtils.getForgePlayer(sender, args[0]);
 
         if (args.length == 1) {
-            sender.addChatMessage(EnumTeamStatus.NAME_MAP.getDisplayName(sender, p.team.getHighestStatus(p1)));
+            sender.addChatMessage(EnumTeamStatus.NAME_MAP.getDisplayName(sender, p.getTeam().getHighestStatus(p1)));
             return;
         }
 
-        if (p.team.isOwner(p1)) {
+        if (p.getTeam().isOwner(p1)) {
             throw ServerUtilities.error(sender, "serverutilities.lang.team.permission.owner");
-        } else if (!p.team.isModerator(p)) {
+        } else if (!p.getTeam().isModerator(p)) {
             throw new CommandException("commands.generic.permission");
         }
 
-        EnumTeamStatus status = EnumTeamStatus.NAME_MAP.get(args[1].toLowerCase());
+        EnumTeamStatus status = EnumTeamStatus.NAME_MAP.get(args[1].toLowerCase(java.util.Locale.ROOT));
 
         if (status.canBeSet()) {
-            p.team.setStatus(p1, status);
+            p.getTeam().setStatus(p1, status);
             sender.addChatMessage(
                     ServerUtilities.lang(
                             sender,

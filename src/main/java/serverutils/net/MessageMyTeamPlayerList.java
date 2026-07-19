@@ -76,12 +76,12 @@ public class MessageMyTeamPlayerList extends MessageToClient {
         id = _id;
         entries = new ArrayList<>();
 
-        for (ForgePlayer p : player.team.universe.getPlayers()) {
+        for (ForgePlayer p : player.getUniverse().getPlayers()) {
             if (p != player) {
-                EnumTeamStatus status = player.team.getHighestStatus(p);
+                EnumTeamStatus status = player.getTeam().getHighestStatus(p);
 
                 if (status != EnumTeamStatus.OWNER && predicate.test(status)) {
-                    entries.add(new Entry(p, status, player.team.isRequestingInvite(p)));
+                    entries.add(new Entry(p, status, player.getTeam().isRequestingInvite(p)));
                 }
             }
         }
